@@ -97,6 +97,115 @@ function saveClaims(claims) {
     }
 }
 
+// =========================
+// TICKET CLOSE COMMAND (-close)
+// =========================
+// Usage: -close <reason>
+// Staff-only, ticket channels only.
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith('-close')) return;
+
+        // =========================
+        // CHECK TICKET CHANNEL
+        // =========================
+
+        const topic = message.channel.topic || '';
+
+        if (!topic.includes('ticket-owner:')) {
+            return;
+        }
+
+        // =========================
+        // CHECK STAFF
+        // =========================
+
+        if (!isStaffMember(message.member)) {
+
+            await message.reply({
+                content:
+                    '❌ Only staff members can close tickets.'
+            }).catch(() => {});
+
+            return;
+        }
+
+        // =========================
+        // GET REASON
+        // =========================
+
+        const reason =
+            message.content
+                .slice('-close'.length)
+                .trim();
+
+        if (!reason) {
+
+            await message.reply({
+                content:
+                    '❌ Please provide a reason.\nUsage: `-close <reason>`'
+            }).catch(() => {});
+
+            return;
+        }
+
+        // =========================
+        // CLOSING MESSAGE
+        // =========================
+
+        await message.channel.send({
+            content:
+                `🔒 **Ticket Closing**\n\n` +
+                `**Closed by:** ${message.author}\n` +
+                `**Reason:** ${reason}\n\n` +
+                `This ticket will be closed shortly.`
+        }).catch(() => {});
+
+        // =========================
+        // DELETE AFTER DELAY
+        // =========================
+
+        setTimeout(
+            async () => {
+
+                try {
+
+                    const claims = loadClaims();
+
+                    if (
+                        claims[message.channel.id]
+                    ) {
+
+                        delete claims[
+                            message.channel.id
+                        ];
+
+                        saveClaims(claims);
+                    }
+
+                    await message.channel.delete();
+
+                } catch (error) {
+
+                    console.error(
+                        'Error closing ticket with -close:',
+                        error
+                    );
+
+                }
+
+            },
+            1500
+        );
+
+    }
+);
+
 
 // =========================
 // LOAD COMMANDS
