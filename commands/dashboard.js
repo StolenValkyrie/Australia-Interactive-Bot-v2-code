@@ -95,10 +95,14 @@ function buildDashboardContainer(guild) {
         )
 
         // Footer
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                'Waratah Heights • Rules & Guidelines\nWebsite: https://australia-interactive-website.web.app/'
-            )
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder()
+                .addItems(
+                    new MediaGalleryItemBuilder()
+                        .setURL(
+                            'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png'
+                        )
+                )
         );
 }
 
