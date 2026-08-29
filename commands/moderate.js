@@ -1,8 +1,78 @@
 const {
     SlashCommandBuilder,
     PermissionFlagsBits,
-    MessageFlags
+    MessageFlags,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+    MediaGalleryBuilder,
+    MediaGalleryItemBuilder,
 } = require('discord.js');
+
+// =====================================
+// PRESET BANNER / FOOTER IMAGES
+// =====================================
+// NOTE: placeholders reusing infraction.js's banner — swap these for
+// verify.js's actual URLs if you want an exact match.
+
+const BANNER_IMAGE =
+    'https://images-ext-1.discordapp.net/external/WUzjcotyAei5sB34AG_5JzjWelB8H7oIn2JjoxeOSn0/https/api.kite.onl/v1/assets/cq7mltbfbn9y95tb?format=webp';
+
+const FOOTER_IMAGE =
+    'https://images-ext-1.discordapp.net/external/WUzjcotyAei5sB34AG_5JzjWelB8H7oIn2JjoxeOSn0/https/api.kite.onl/v1/assets/cq7mltbfbn9y95tb?format=webp';
+
+// Channel the moderation log gets posted to.
+const LOG_CHANNEL_ID = '1521449826166767687';
+
+const PUNISHMENT_LABELS = {
+    warn: 'Warning',
+    timeout: 'Timeout',
+    kick: 'Kick',
+    ban: 'Ban',
+};
+
+function buildModOptions(subcommand, { includeDuration } = {}) {
+    subcommand
+        .addUserOption(option =>
+            option
+                .setName('user')
+                .setDescription('The member to moderate')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName('reason')
+                .setDescription('Reason')
+                .setRequired(true)
+        );
+
+    if (includeDuration) {
+        subcommand.addIntegerOption(option =>
+            option
+                .setName('duration')
+                .setDescription('Duration in minutes')
+                .setMinValue(1)
+                .setMaxValue(40320)
+                .setRequired(true)
+        );
+    }
+
+    subcommand
+        .addStringOption(option =>
+            option
+                .setName('notes')
+                .setDescription('Additional notes')
+                .setRequired(false)
+        )
+        .addAttachmentOption(option =>
+            option
+                .setName('evidence')
+                .setDescription('Upload evidence for this action')
+                .setRequired(false)
+        );
+
+    return subcommand;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -13,83 +83,36 @@ module.exports = {
         )
 
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('warn')
-                .setDescription('Warn a member')
-                .addUserOption(option =>
-                    option
-                        .setName('user')
-                        .setDescription('The member to warn')
-                        .setRequired(true)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName('reason')
-                        .setDescription('Reason for the warning')
-                        .setRequired(true)
-                )
+            buildModOptions(
+                subcommand
+                    .setName('warn')
+                    .setDescription('Warn a member')
+            )
         )
 
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('timeout')
-                .setDescription('Timeout a member')
-                .addUserOption(option =>
-                    option
-                        .setName('user')
-                        .setDescription('The member to timeout')
-                        .setRequired(true)
-                )
-                .addIntegerOption(option =>
-                    option
-                        .setName('duration')
-                        .setDescription('Duration in minutes')
-                        .setMinValue(1)
-                        .setMaxValue(40320)
-                        .setRequired(true)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName('reason')
-                        .setDescription('Reason for the timeout')
-                        .setRequired(true)
-                )
+            buildModOptions(
+                subcommand
+                    .setName('timeout')
+                    .setDescription('Timeout a member'),
+                { includeDuration: true }
+            )
         )
 
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('kick')
-                .setDescription('Kick a member')
-                .addUserOption(option =>
-                    option
-                        .setName('user')
-                        .setDescription('The member to kick')
-                        .setRequired(true)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName('reason')
-                        .setDescription('Reason for the kick')
-                        .setRequired(true)
-                )
+            buildModOptions(
+                subcommand
+                    .setName('kick')
+                    .setDescription('Kick a member')
+            )
         )
 
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('ban')
-                .setDescription('Ban a member')
-                .addUserOption(option =>
-                    option
-                        .setName('user')
-                        .setDescription('The member to ban')
-                        .setRequired(true)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName('reason')
-                        .setDescription('Reason for the ban')
-                        .setRequired(true)
-                )
+            buildModOptions(
+                subcommand
+                    .setName('ban')
+                    .setDescription('Ban a member')
+            )
         ),
 
     async execute(interaction) {
@@ -114,6 +137,13 @@ module.exports = {
 
         const reason =
             interaction.options.getString('reason');
+
+        const notes =
+            interaction.options.getString('notes') ||
+            'No additional notes provided.';
+
+        const evidence =
+            interaction.options.getAttachment('evidence');
 
         // Get the guild member
         const member =
@@ -157,6 +187,8 @@ module.exports = {
         }
 
 
+        let durationText = 'N/A';
+
         try {
 
             // =========================
@@ -164,9 +196,6 @@ module.exports = {
             // =========================
 
             if (subcommand === 'warn') {
-
-                // For now, warnings are sent to the user.
-                // You can add a database later to permanently store them.
 
                 try {
                     await user.send(
@@ -176,13 +205,6 @@ module.exports = {
                 } catch {
                     // User may have DMs disabled
                 }
-
-                return interaction.reply({
-                    content:
-                        `⚠️ **${user.tag}** has been warned.\n` +
-                        `**Reason:** ${reason}`,
-                    flags: MessageFlags.Ephemeral
-                });
             }
 
 
@@ -193,23 +215,14 @@ module.exports = {
             if (subcommand === 'timeout') {
 
                 const duration =
-                    interaction.options.getInteger(
-                        'duration'
-                    );
+                    interaction.options.getInteger('duration');
 
                 const milliseconds =
                     duration * 60 * 1000;
 
-                await member.timeout(
-                    milliseconds,
-                    reason
-                );
+                await member.timeout(milliseconds, reason);
 
-                return interaction.reply({
-                    content:
-                        `🔇 **${user.tag}** has been timed out for **${duration} minute(s)**.\n` +
-                        `**Reason:** ${reason}`
-                });
+                durationText = `${duration} minute(s)`;
             }
 
 
@@ -218,14 +231,7 @@ module.exports = {
             // =========================
 
             if (subcommand === 'kick') {
-
                 await member.kick(reason);
-
-                return interaction.reply({
-                    content:
-                        `👢 **${user.tag}** has been kicked.\n` +
-                        `**Reason:** ${reason}`
-                });
             }
 
 
@@ -234,30 +240,139 @@ module.exports = {
             // =========================
 
             if (subcommand === 'ban') {
-
-                await member.ban({
-                    reason: reason
-                });
-
-                return interaction.reply({
-                    content:
-                        `🔨 **${user.tag}** has been banned.\n` +
-                        `**Reason:** ${reason}`
-                });
+                await member.ban({ reason });
             }
 
         } catch (error) {
 
-            console.error(
-                'Moderation error:',
-                error
-            );
+            console.error('Moderation error:', error);
 
             return interaction.reply({
                 content:
                     '❌ I could not perform that moderation action. Check my permissions and role hierarchy.',
                 flags: MessageFlags.Ephemeral
             });
+        }
+
+
+        // =========================
+        // QUICK CONFIRMATION TO STAFF
+        // =========================
+
+        await interaction.reply({
+            content: `✅ **${user.tag}** — ${PUNISHMENT_LABELS[subcommand]} logged in <#${LOG_CHANNEL_ID}>.`,
+            flags: MessageFlags.Ephemeral
+        });
+
+
+        // =========================
+        // MOD LOG MESSAGE
+        // =========================
+
+        const date = new Date().toLocaleDateString(
+            'en-AU',
+            {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            }
+        );
+
+        const logContainer = new ContainerBuilder()
+            .setAccentColor(0x5865F2)
+
+            // Banner
+            .addMediaGalleryComponents(
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(BANNER_IMAGE)
+                    )
+            )
+
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(1)
+            )
+
+            // Title + details
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    `# Moderation Action\n\n` +
+                    `**Suspects Discord Username (Ping them):** <@${user.id}>\n` +
+                    `**Moderator's Names:** <@${interaction.user.id}>\n` +
+                    `**Reason:** ${reason}\n` +
+                    `**Punishment:** ${PUNISHMENT_LABELS[subcommand]}\n` +
+                    `**Punishment Duration:** ${durationText}\n` +
+                    `**Date of punishment:** ${date}\n` +
+                    `**Notes:** ${notes}`
+                )
+            )
+
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(1)
+            )
+
+            // Footer image
+            .addMediaGalleryComponents(
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(FOOTER_IMAGE)
+                    )
+            );
+
+        const logComponents = [logContainer];
+
+        if (evidence) {
+
+            const evidenceContainer = new ContainerBuilder()
+                .setAccentColor(0x5865F2)
+
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('# 📸 Evidence')
+                )
+
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setDivider(true).setSpacing(1)
+                )
+
+                .addMediaGalleryComponents(
+                    new MediaGalleryBuilder()
+                        .addItems(
+                            new MediaGalleryItemBuilder()
+                                .setURL(evidence.url)
+                        )
+                )
+
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setDivider(true).setSpacing(1)
+                )
+
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `Evidence uploaded by <@${interaction.user.id}>`
+                    )
+                );
+
+            logComponents.push(evidenceContainer);
+        }
+
+        const logChannel = await interaction.client.channels
+            .fetch(LOG_CHANNEL_ID)
+            .catch(() => null);
+
+        if (!logChannel) {
+            console.error(`moderate: could not find log channel ${LOG_CHANNEL_ID}`);
+            return;
+        }
+
+        try {
+            await logChannel.send({
+                components: logComponents,
+                flags: MessageFlags.IsComponentsV2,
+            });
+        } catch (error) {
+            console.error('moderate: failed to post log message:', error);
         }
     }
 };
