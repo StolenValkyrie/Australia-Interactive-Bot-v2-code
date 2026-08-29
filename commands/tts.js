@@ -27,6 +27,17 @@ function getPlayer(guildId) {
   return players.get(guildId);
 }
 
+// editReply can fail (e.g. "Unknown Message") in rare edge cases. Never let
+// that throw uncaught — that's what was crashing the whole bot process.
+async function safeEditReply(interaction, payload) {
+  try {
+    return await interaction.editReply(payload);
+  } catch (err) {
+    console.error('tts: editReply failed:', err);
+    return null;
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('tts')
@@ -69,7 +80,7 @@ module.exports = {
       if (subcommand === 'join') {
         const voiceChannel = member.voice.channel;
         if (!voiceChannel) {
-          return interaction.editReply({
+          return safeEditReply(interaction, {
             content: '❌ You need to be in a voice channel first.',
           });
         }
@@ -84,7 +95,7 @@ module.exports = {
           await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
         } catch (err) {
           connection.destroy();
-          return interaction.editReply({
+          return safeEditReply(interaction, {
             content: '❌ Could not join the voice channel.',
           });
         }
@@ -92,13 +103,13 @@ module.exports = {
         const player = getPlayer(guildId);
         connection.subscribe(player);
 
-        return interaction.editReply({ content: `✅ Joined **${voiceChannel.name}**.` });
+        return safeEditReply(interaction, { content: `✅ Joined **${voiceChannel.name}**.` });
       }
 
       if (subcommand === 'say') {
         const connection = getVoiceConnection(guildId);
         if (!connection) {
-          return interaction.editReply({
+          return safeEditReply(interaction, {
             content: '❌ I need to be in a voice channel first. Use `/tts join`.',
           });
         }
@@ -117,13 +128,13 @@ module.exports = {
         player.play(resource);
         await entersState(player, AudioPlayerStatus.Playing, 10_000).catch(() => {});
 
-        return interaction.editReply({ content: `🔊 Speaking: "${text}"` });
+        return safeEditReply(interaction, { content: `🔊 Speaking: "${text}"` });
       }
 
       if (subcommand === 'leave') {
         const connection = getVoiceConnection(guildId);
         if (!connection) {
-          return interaction.editReply({
+          return safeEditReply(interaction, {
             content: '❌ I am not in a voice channel.',
           });
         }
@@ -131,12 +142,12 @@ module.exports = {
         connection.destroy();
         players.delete(guildId);
 
-        return interaction.editReply({ content: '👋 Left the voice channel.' });
+        return safeEditReply(interaction, { content: '👋 Left the voice channel.' });
       }
     } catch (err) {
       console.error('tts execute error:', err);
       try {
-        await interaction.editReply({ content: '❌ Something went wrong running that command.' });
+        await safeEditReply(interaction, { content: '❌ Something went wrong running that command.' });
       } catch (editErr) {
         console.error('tts: failed to send error editReply:', editErr);
       }
