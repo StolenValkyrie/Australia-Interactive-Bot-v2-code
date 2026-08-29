@@ -43,32 +43,38 @@ function scheduleNextPing(client, guildId) {
   activeTrolls.set(guildId, timeoutId);
 }
 
-module.exports = {
-  data: [
-    new SlashCommandBuilder()
+function checkOwner(interaction) {
+  return interaction.user.id === OWNER_ID;
+}
+
+module.exports = [
+  {
+    data: new SlashCommandBuilder()
       .setName('trollping-start')
       .setDescription('Start the troll ping loop (owner only)'),
-    new SlashCommandBuilder()
-      .setName('trollping-stop')
-      .setDescription('Stop the troll ping loop (owner only)'),
-  ],
 
-  async execute(interaction) {
-    if (interaction.user.id !== OWNER_ID) {
-      return interaction.reply({ content: "You can't use this command.", ephemeral: true });
-    }
-
-    const guildId = interaction.guildId;
-
-    if (interaction.commandName === 'trollping-start') {
+    async execute(interaction) {
+      if (!checkOwner(interaction)) {
+        return interaction.reply({ content: "You can't use this command.", ephemeral: true });
+      }
+      const guildId = interaction.guildId;
       if (activeTrolls.has(guildId)) {
         return interaction.reply({ content: 'Already running.', ephemeral: true });
       }
       scheduleNextPing(interaction.client, guildId);
       return interaction.reply({ content: 'Troll ping loop started.', ephemeral: true });
-    }
+    },
+  },
+  {
+    data: new SlashCommandBuilder()
+      .setName('trollping-stop')
+      .setDescription('Stop the troll ping loop (owner only)'),
 
-    if (interaction.commandName === 'trollping-stop') {
+    async execute(interaction) {
+      if (!checkOwner(interaction)) {
+        return interaction.reply({ content: "You can't use this command.", ephemeral: true });
+      }
+      const guildId = interaction.guildId;
       const timeoutId = activeTrolls.get(guildId);
       if (!timeoutId) {
         return interaction.reply({ content: 'Not currently running.', ephemeral: true });
@@ -76,6 +82,6 @@ module.exports = {
       clearTimeout(timeoutId);
       activeTrolls.delete(guildId);
       return interaction.reply({ content: 'Troll ping loop stopped.', ephemeral: true });
-    }
+    },
   },
-};
+];
