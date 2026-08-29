@@ -10,7 +10,6 @@ const {
     MessageFlags,
     MediaGalleryBuilder,
     MediaGalleryItemBuilder
-    
 } = require('discord.js');
 
 module.exports = {
@@ -21,85 +20,92 @@ module.exports = {
 
     async execute(interaction) {
 
-        const container =
-            new ContainerBuilder()
-                .setAccentColor(0x5865F2)
+        const container = new ContainerBuilder()
+            .setAccentColor(0x5865F2)
 
+            // TOP IMAGE
             .addMediaGalleryComponents(
-    new MediaGalleryBuilder()
-        .addItems(
-            new MediaGalleryItemBuilder()
-                .setURL('https://cdn.phototourl.com/free/2026-08-29-6dd0b31e-ed94-4abc-8c30-769955528ef9.webp')
-        )
-)
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(
+                                'https://cdn.phototourl.com/free/2026-08-29-6dd0b31e-ed94-4abc-8c30-769955528ef9.webp'
+                            )
+                    )
+            )
 
-                .addSeparatorComponents(
-                    new SeparatorBuilder()
-                        .setDivider(true)
-                        .setSpacing(1)
-                )
+            // SEPARATOR
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
 
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            '### Australia Interactive Roblox Verification'
-                        )
-                )
+            // TITLE
+            .addTextDisplayComponents(
+                new TextDisplayBuilder()
+                    .setContent(
+                        '### Australia Interactive Roblox Verification'
+                    )
+            )
 
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            'Verify with roblox to continue to the rest of the server. By the way <@1337622266493534279> is gay and in made in love with me. Send help..'
-                        )
-                )
+            // DESCRIPTION
+            .addTextDisplayComponents(
+                new TextDisplayBuilder()
+                    .setContent(
+                        'Click the **Verify** button below to link your Roblox account with Discord.'
+                    )
+            )
 
-                .addSeparatorComponents(
-                    new SeparatorBuilder()
-                        .setDivider(true)
-                        .setSpacing(1)
-                )
+            // SEPARATOR
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
 
-                .addActionRowComponents(
-                    new ActionRowBuilder()
-                        .addComponents(
+            // VERIFY BUTTON
+            .addActionRowComponents(
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('dock_verify')
+                            .setLabel('Verify')
+                            .setStyle(ButtonStyle.Primary)
+                    )
+            )
 
-                            new ButtonBuilder()
-                                .setCustomId('dock_verify')
-                                .setLabel('Verify')
-                                .setStyle(ButtonStyle.Primary)
-                        )
-                )
+            // SEPARATOR
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
 
-        .addSeparatorComponents(
-                    new SeparatorBuilder()
-                        .setDivider(true)
-                        .setSpacing(1)
-                )
+            // BOTTOM GIF
+            .addMediaGalleryComponents(
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(
+                                'https://files.catbox.moe/apbldk.gif'
+                            )
+                    )
+            );
 
-.addMediaGalleryComponents(
-    new MediaGalleryBuilder()
-        .addItems(
-            new MediaGalleryItemBuilder()
-                .setURL('https://files.catbox.moe/apbldk.gif')
-        )
-)
-);
 
+        // SEND PANEL
         await interaction.channel.send({
-
             components: [container],
-
             flags: MessageFlags.IsComponentsV2
         });
 
+
+        // CONFIRMATION
         await interaction.reply({
-
-            content:
-                '✅ Verification panel sent!',
-
-            flags:
-                MessageFlags.Ephemeral
+            content: '✅ Verification panel sent!',
+            flags: MessageFlags.Ephemeral
         });
+
     }
 };
-
