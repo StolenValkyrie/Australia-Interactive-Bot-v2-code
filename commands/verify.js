@@ -1,4 +1,4 @@
-
+```js
 const {
     SlashCommandBuilder,
     ContainerBuilder,
@@ -79,36 +79,54 @@ module.exports = {
                     .setSpacing(1)
             )
 
+            // =========================
+            // VERIFY BUTTON
+            // =========================
 
-// =========================
-// VERIFY BUTTON
-// =========================
+            .addActionRowComponents(
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('dock_verify')
+                            .setLabel('Verify')
+                            .setStyle(ButtonStyle.Primary)
+                    )
+            );
 
-.addActionRowComponents(
-    new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('dock_verify')
-                .setLabel('Verify')
-                .setStyle(ButtonStyle.Primary)
-        )
-)
+        // =========================
+        // VERIFY CHANNEL
+        // =========================
 
+        const verifyChannel =
+            await interaction.guild.channels.fetch(
+                '1466957818857918568'
+            );
 
+        if (!verifyChannel) {
 
+            await interaction.reply({
+                content:
+                    '❌ Verification channel not found.',
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
 
         // =========================
         // SEND PANEL
         // =========================
 
-        await interaction.channel.send({
+        await verifyChannel.send({
 
-            components: [container],
+            components:
+                [container],
 
-            flags: MessageFlags.IsComponentsV2
+            flags:
+                MessageFlags.IsComponentsV2
 
         });
-
 
         // =========================
         // CONFIRMATION
@@ -117,7 +135,7 @@ module.exports = {
         await interaction.reply({
 
             content:
-                '✅ Verification panel sent!',
+                '✅ Verification panel sent to <#1466957818857918568>!',
 
             flags:
                 MessageFlags.Ephemeral
@@ -126,4 +144,6 @@ module.exports = {
 
     }
 };
+```
 
+This keeps your **Media Gallery**, **Components V2**, and **Verify button**, while making `/verify` always send the panel to channel `1466957818857918568`.
