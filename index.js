@@ -2,7 +2,26 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
+
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    Collection,
+    Events,
+    ActivityType,
+    PresenceUpdateStatus,
+    REST,
+    Routes,
+    MessageFlags,
+    EmbedBuilder,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
+} = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -1196,8 +1215,5 @@ client.on(
 // =========================
 // LOGIN
 // =========================
-
-console.log('TOKEN exists:', !!process.env.TOKEN);
-console.log('TOKEN length:', process.env.TOKEN?.length);
 
 client.login(process.env.BOT_TOKEN);
