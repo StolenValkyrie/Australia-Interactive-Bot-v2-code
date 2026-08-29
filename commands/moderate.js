@@ -19,7 +19,7 @@ const BANNER_IMAGE =
     'https://cdn.phototourl.com/free/2026-08-29-6dd0b31e-ed94-4abc-8c30-769955528ef9.webp';
 
 const FOOTER_IMAGE =
-    'https://images-ext-1.discordapp.net/external/WUzjcotyAei5sB34AG_5JzjWelB8H7oIn2JjoxeOSn0/https/api.kite.onl/v1/assets/cq7mltbfbn9y95tb?format=webp';
+    'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png';
 
 // Channel the moderation log gets posted to.
 const LOG_CHANNEL_ID = '1521449826166767687';
