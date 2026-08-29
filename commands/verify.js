@@ -23,10 +23,6 @@ module.exports = {
         const apiKey = process.env.DOCK_API_KEY;
         const pid = process.env.DOCK_PID;
 
-        // =========================
-        // CHECK CONFIGURATION
-        // =========================
-
         if (!apiKey || !pid) {
 
             console.error(
@@ -73,11 +69,6 @@ module.exports = {
             const result =
                 await response.json();
 
-            console.log(
-                'Dock response:',
-                result
-            );
-
             if (!response.ok) {
 
                 console.error(
@@ -112,7 +103,7 @@ module.exports = {
             }
 
             // =========================
-            // CREATE COMPONENTS V2 PANEL
+            // CREATE PANEL
             // =========================
 
             const container =
@@ -149,8 +140,7 @@ module.exports = {
 
                         new TextDisplayBuilder()
                             .setContent(
-                                'Click the **Verify** button below to connect your Roblox account to Discord.\n\n' +
-                                'You will be redirected to Dock to complete the verification process.'
+                                'Click the **Verify** button below to begin verifying your Roblox account with Dock.'
                             )
                     )
 
@@ -168,6 +158,10 @@ module.exports = {
 
                                 new ButtonBuilder()
 
+                                    .setCustomId(
+                                        'dock_verify'
+                                    )
+
                                     .setLabel(
                                         'Verify'
                                     )
@@ -177,30 +171,32 @@ module.exports = {
                                     )
 
                                     .setStyle(
-                                        ButtonStyle.Link
-                                    )
-
-                                    .setURL(
-                                        session.verifyUrl
+                                        ButtonStyle.Primary
                                     )
                             )
                     );
 
             // =========================
-            // SEND PANEL TO CHANNEL
+            // STORE SESSION URL
             // =========================
 
+            // The URL is attached to the message so
+            // the button handler can retrieve it.
             await interaction.channel.send({
 
                 components:
                     [container],
 
                 flags:
-                    MessageFlags.IsComponentsV2
+                    MessageFlags.IsComponentsV2,
+
+                allowedMentions: {
+                    parse: []
+                }
             });
 
             // =========================
-            // HIDE SLASH COMMAND RESPONSE
+            // COMMAND CONFIRMATION
             // =========================
 
             await interaction.reply({
