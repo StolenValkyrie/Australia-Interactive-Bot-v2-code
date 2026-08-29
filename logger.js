@@ -6,7 +6,7 @@
 //   require('./logger.js')(client);
 //
 // Configure via .env:
-//   LOG_CHANNEL_ID=channel_id_to_send_logs_to
+//   LOG_CHANNEL_ID=1468124876618596466
 
 const { EmbedBuilder, Events } = require('discord.js');
 
