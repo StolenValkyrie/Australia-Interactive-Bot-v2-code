@@ -88,7 +88,7 @@ module.exports = {
                     .addItems(
                         new MediaGalleryItemBuilder()
                             .setURL(
-                                'https://files.catbox.moe/apbldk.gif'
+                                'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png'
                             )
                     )
             );
