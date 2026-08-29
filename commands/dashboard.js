@@ -76,6 +76,12 @@ function buildDashboardContainer(guild) {
                             .setEmoji('🚨'),
 
                         new StringSelectMenuOptionBuilder()
+                            .setLabel('Partnerships')
+                            .setDescription('Discuss a partnership or collaboration')
+                            .setValue('partnerships')
+                            .setEmoji('🤝'),
+
+                        new StringSelectMenuOptionBuilder()
                             .setLabel('Other')
                             .setDescription('Create another type of ticket')
                             .setValue('other')
@@ -110,13 +116,9 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('dashboard')
         .setDescription('Posts the server dashboard panel')
-        // Only staff/admins should be able to trigger this — it posts
-        // publicly to a fixed channel, so it shouldn't be open to everyone.
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
     async execute(interaction) {
-        // Acknowledge privately first — the actual panel goes to the
-        // dashboard channel, not here, so keep this reply ephemeral.
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const channel = await interaction.client.channels
