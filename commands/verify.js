@@ -79,21 +79,22 @@ module.exports = {
                     .setSpacing(1)
             )
 
-            // =========================
-            // VERIFY BUTTON
-            // =========================
 
-            .addActionRowComponents(
-                new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setLabel('Verify')
-                            .setStyle(ButtonStyle.Link)
-                            .setURL(
-                                'YOUR_DOCKSYS_VERIFICATION_URL'
-                            )
-                    )
-            );
+// =========================
+// VERIFY BUTTON
+// =========================
+
+.addActionRowComponents(
+    new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('dock_verify')
+                .setLabel('Verify')
+                .setStyle(ButtonStyle.Primary)
+        )
+)
+
+
 
 
         // =========================
