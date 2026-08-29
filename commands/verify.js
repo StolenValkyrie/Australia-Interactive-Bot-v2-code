@@ -76,12 +76,13 @@ module.exports = {
                         .setSpacing(1)
                 )
 
-        .addMediaGalleryComponents(
+.addMediaGalleryComponents(
     new MediaGalleryBuilder()
         .addItems(
             new MediaGalleryItemBuilder()
                 .setURL('https://files.catbox.moe/apbldk.gif')
         )
+)
 );
 
         await interaction.channel.send({
