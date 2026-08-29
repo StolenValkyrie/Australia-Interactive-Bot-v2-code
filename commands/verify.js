@@ -7,10 +7,11 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    MessageFlags
+    MessageFlags,
+    MediaGalleryBuilder,
+    MediaGalleryItemBuilder
+    
 } = require('discord.js');
-
-const API_URL = 'https://api.docksys.xyz';
 
 module.exports = {
 
@@ -20,213 +21,84 @@ module.exports = {
 
     async execute(interaction) {
 
-        const apiKey = process.env.DOCK_API_KEY;
-        const pid = process.env.DOCK_PID;
+        const container =
+            new ContainerBuilder()
+                .setAccentColor(0x5865F2)
 
-        if (!apiKey || !pid) {
+            .addMediaGalleryComponents(
+    new MediaGalleryBuilder()
+        .addItems(
+            new MediaGalleryItemBuilder()
+                .setURL('https://cdn.phototourl.com/free/2026-08-29-6dd0b31e-ed94-4abc-8c30-769955528ef9.webp')
+        )
+)
 
-            console.error(
-                'DOCK_API_KEY or DOCK_PID is missing.'
-            );
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                        .setDivider(true)
+                        .setSpacing(1)
+                )
 
-            return interaction.reply({
-                content:
-                    '❌ Verification is not configured correctly.',
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            '### Australia Interactive Roblox Verification'
+                        )
+                )
 
-        try {
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            'Click the **Verify** button below to link your Roblox account with Discord.'
+                        )
+                )
 
-            // =========================
-            // CREATE DOCK SESSION
-            // =========================
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                        .setDivider(true)
+                        .setSpacing(1)
+                )
 
-            const response = await fetch(
-                `${API_URL}/v2/sessions`,
-                {
-                    method: 'POST',
+                .addActionRowComponents(
+                    new ActionRowBuilder()
+                        .addComponents(
 
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
+                            new ButtonBuilder()
+                                .setCustomId('dock_verify')
+                                .setLabel('Verify')
+                                .setStyle(ButtonStyle.Primary)
+                        )
+                )
 
-                    body: JSON.stringify({
+        .addSeparatorComponents(
+                    new SeparatorBuilder()
+                        .setDivider(true)
+                        .setSpacing(1)
+                )
 
-                        pid: pid,
+        .addMediaGalleryComponents(
+    new MediaGalleryBuilder()
+        .addItems(
+            new MediaGalleryItemBuilder()
+                .setURL('https://files.catbox.moe/apbldk.gif')
+        )
+);
 
-                        clientId:
-                            interaction.user.id,
+        await interaction.channel.send({
 
-                        guildId:
-                            interaction.guild.id
-                    })
-                }
-            );
+            components: [container],
 
-            const result =
-                await response.json();
+            flags: MessageFlags.IsComponentsV2
+        });
 
-            if (!response.ok) {
+        await interaction.reply({
 
-                console.error(
-                    'Dock API error:',
-                    result
-                );
+            content:
+                '✅ Verification panel sent!',
 
-                return interaction.reply({
-                    content:
-                        '❌ Could not create a verification session.',
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-            }
-
-            const session =
-                result.data;
-
-            if (!session?.verifyUrl) {
-
-                console.error(
-                    'Dock did not return a verification URL:',
-                    result
-                );
-
-                return interaction.reply({
-                    content:
-                        '❌ Dock did not return a verification URL.',
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-            }
-
-            // =========================
-            // CREATE PANEL
-            // =========================
-
-            const container =
-                new ContainerBuilder()
-
-                    .setAccentColor(
-                        0x5865F2
-                    )
-
-                    .addTextDisplayComponents(
-
-                        new TextDisplayBuilder()
-                            .setContent(
-                                '# 🔐 Roblox Verification'
-                            )
-                    )
-
-                    .addSeparatorComponents(
-
-                        new SeparatorBuilder()
-                            .setDivider(true)
-                            .setSpacing(1)
-                    )
-
-                    .addTextDisplayComponents(
-
-                        new TextDisplayBuilder()
-                            .setContent(
-                                '### Verify your Roblox account'
-                            )
-                    )
-
-                    .addTextDisplayComponents(
-
-                        new TextDisplayBuilder()
-                            .setContent(
-                                'Click the **Verify** button below to begin verifying your Roblox account with Dock.'
-                            )
-                    )
-
-                    .addSeparatorComponents(
-
-                        new SeparatorBuilder()
-                            .setDivider(true)
-                            .setSpacing(1)
-                    )
-
-                    .addActionRowComponents(
-
-                        new ActionRowBuilder()
-                            .addComponents(
-
-                                new ButtonBuilder()
-
-                                    .setCustomId(
-                                        'dock_verify'
-                                    )
-
-                                    .setLabel(
-                                        'Verify'
-                                    )
-
-                                    .setEmoji(
-                                        '🔗'
-                                    )
-
-                                    .setStyle(
-                                        ButtonStyle.Primary
-                                    )
-                            )
-                    );
-
-            // =========================
-            // STORE SESSION URL
-            // =========================
-
-            // The URL is attached to the message so
-            // the button handler can retrieve it.
-            await interaction.channel.send({
-
-                components:
-                    [container],
-
-                flags:
-                    MessageFlags.IsComponentsV2,
-
-                allowedMentions: {
-                    parse: []
-                }
-            });
-
-            // =========================
-            // COMMAND CONFIRMATION
-            // =========================
-
-            await interaction.reply({
-
-                content:
-                    '✅ Verification panel sent!',
-
-                flags:
-                    MessageFlags.Ephemeral
-            });
-
-        } catch (error) {
-
-            console.error(
-                'Dock verification error:',
-                error
-            );
-
-            if (!interaction.replied) {
-
-                await interaction.reply({
-
-                    content:
-                        '❌ An error occurred while creating the verification panel.',
-
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-            }
-        }
+            flags:
+                MessageFlags.Ephemeral
+        });
     }
 };
 
