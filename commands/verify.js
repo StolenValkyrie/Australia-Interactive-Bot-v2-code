@@ -23,7 +23,10 @@ module.exports = {
         const container = new ContainerBuilder()
             .setAccentColor(0x5865F2)
 
+            // =========================
             // TOP IMAGE
+            // =========================
+
             .addMediaGalleryComponents(
                 new MediaGalleryBuilder()
                     .addItems(
@@ -34,14 +37,20 @@ module.exports = {
                     )
             )
 
+            // =========================
             // SEPARATOR
+            // =========================
+
             .addSeparatorComponents(
                 new SeparatorBuilder()
                     .setDivider(true)
                     .setSpacing(1)
             )
 
+            // =========================
             // TITLE
+            // =========================
+
             .addTextDisplayComponents(
                 new TextDisplayBuilder()
                     .setContent(
@@ -49,7 +58,10 @@ module.exports = {
                     )
             )
 
+            // =========================
             // DESCRIPTION
+            // =========================
+
             .addTextDisplayComponents(
                 new TextDisplayBuilder()
                     .setContent(
@@ -57,55 +69,60 @@ module.exports = {
                     )
             )
 
+            // =========================
             // SEPARATOR
+            // =========================
+
             .addSeparatorComponents(
                 new SeparatorBuilder()
                     .setDivider(true)
                     .setSpacing(1)
             )
 
+            // =========================
             // VERIFY BUTTON
+            // =========================
+
             .addActionRowComponents(
                 new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
-                            .setCustomId('dock_verify')
                             .setLabel('Verify')
-                            .setStyle(ButtonStyle.Primary)
-                    )
-            )
-
-            // SEPARATOR
-            .addSeparatorComponents(
-                new SeparatorBuilder()
-                    .setDivider(true)
-                    .setSpacing(1)
-            )
-
-            // BOTTOM GIF
-            .addMediaGalleryComponents(
-                new MediaGalleryBuilder()
-                    .addItems(
-                        new MediaGalleryItemBuilder()
+                            .setStyle(ButtonStyle.Link)
                             .setURL(
-                                'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png'
+                                'YOUR_DOCKSYS_VERIFICATION_URL'
                             )
                     )
             );
 
 
+        // =========================
         // SEND PANEL
+        // =========================
+
         await interaction.channel.send({
+
             components: [container],
+
             flags: MessageFlags.IsComponentsV2
+
         });
 
 
+        // =========================
         // CONFIRMATION
+        // =========================
+
         await interaction.reply({
-            content: '✅ Verification panel sent!',
-            flags: MessageFlags.Ephemeral
+
+            content:
+                '✅ Verification panel sent!',
+
+            flags:
+                MessageFlags.Ephemeral
+
         });
 
     }
 };
+
