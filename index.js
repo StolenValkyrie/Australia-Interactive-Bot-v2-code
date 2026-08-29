@@ -38,7 +38,7 @@ const client = new Client({
         Partials.User,
         Partials.GuildMember
     ]
-});
+});   require('./logger.js')(client);
 
 client.commands = new Collection();
 
