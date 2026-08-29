@@ -1,4 +1,4 @@
-```js
+
 const {
     SlashCommandBuilder,
     ContainerBuilder,
@@ -233,4 +233,4 @@ module.exports = {
         }
     }
 };
-```
+
