@@ -1,4 +1,4 @@
-```js
+
 const {
     SlashCommandBuilder,
     ContainerBuilder,
@@ -20,13 +20,35 @@ module.exports = {
 
     async execute(interaction) {
 
+        // =========================
+        // STAFF CHECK
+        // =========================
+
+        const staffRoleId = process.env.STAFF_ROLE_ID;
+
+        if (
+            !interaction.member?.roles?.cache?.has(staffRoleId) &&
+            !interaction.member?.permissions?.has('Administrator')
+        ) {
+
+            await interaction.reply({
+                content:
+                    '❌ Only staff members can use this command.',
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
+
+        // =========================
+        // VERIFICATION PANEL
+        // =========================
+
         const container = new ContainerBuilder()
             .setAccentColor(0x5865F2)
 
-            // =========================
             // TOP IMAGE
-            // =========================
-
             .addMediaGalleryComponents(
                 new MediaGalleryBuilder()
                     .addItems(
@@ -37,20 +59,14 @@ module.exports = {
                     )
             )
 
-            // =========================
             // SEPARATOR
-            // =========================
-
             .addSeparatorComponents(
                 new SeparatorBuilder()
                     .setDivider(true)
                     .setSpacing(1)
             )
 
-            // =========================
             // TITLE
-            // =========================
-
             .addTextDisplayComponents(
                 new TextDisplayBuilder()
                     .setContent(
@@ -58,10 +74,7 @@ module.exports = {
                     )
             )
 
-            // =========================
             // DESCRIPTION
-            // =========================
-
             .addTextDisplayComponents(
                 new TextDisplayBuilder()
                     .setContent(
@@ -69,20 +82,14 @@ module.exports = {
                     )
             )
 
-            // =========================
             // SEPARATOR
-            // =========================
-
             .addSeparatorComponents(
                 new SeparatorBuilder()
                     .setDivider(true)
                     .setSpacing(1)
             )
 
-            // =========================
             // VERIFY BUTTON
-            // =========================
-
             .addActionRowComponents(
                 new ActionRowBuilder()
                     .addComponents(
@@ -120,11 +127,9 @@ module.exports = {
 
         await verifyChannel.send({
 
-            components:
-                [container],
+            components: [container],
 
-            flags:
-                MessageFlags.IsComponentsV2
+            flags: MessageFlags.IsComponentsV2
 
         });
 
@@ -144,6 +149,3 @@ module.exports = {
 
     }
 };
-```
-
-This keeps your **Media Gallery**, **Components V2**, and **Verify button**, while making `/verify` always send the panel to channel `1466957818857918568`.
