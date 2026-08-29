@@ -16,7 +16,7 @@ const {
 // verify.js's actual URLs if you want an exact match.
 
 const BANNER_IMAGE =
-    'https://images-ext-1.discordapp.net/external/WUzjcotyAei5sB34AG_5JzjWelB8H7oIn2JjoxeOSn0/https/api.kite.onl/v1/assets/cq7mltbfbn9y95tb?format=webp';
+    'https://cdn.phototourl.com/free/2026-08-29-6dd0b31e-ed94-4abc-8c30-769955528ef9.webp';
 
 const FOOTER_IMAGE =
     'https://images-ext-1.discordapp.net/external/WUzjcotyAei5sB34AG_5JzjWelB8H7oIn2JjoxeOSn0/https/api.kite.onl/v1/assets/cq7mltbfbn9y95tb?format=webp';
