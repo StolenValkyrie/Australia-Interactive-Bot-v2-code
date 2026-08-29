@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -41,6 +40,31 @@ const client = new Client({
 
 require('./logger.js')(client);
 client.commands = new Collection();
+
+// =========================
+// SHARED CONSTANTS / HELPERS
+// =========================
+
+// Category all tickets get created under, regardless of type.
+const TICKET_CATEGORY_ID = '1497142936461246464';
+
+// Discord channel names: lowercase, alphanumeric + hyphen/underscore only.
+function sanitizeName(str, fallback = 'ticket') {
+    return (
+        (str || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9-_]/g, '')
+            .slice(0, 90) || fallback
+    );
+}
+
+function isStaffMember(member) {
+    return (
+        member?.roles?.cache?.has(process.env.STAFF_ROLE_ID) ||
+        member?.roles?.cache?.has('1499382533803085975') ||
+        false
+    );
+}
 
 
 // =========================
@@ -208,13 +232,7 @@ client.on(
             // CHECK STAFF
             // =========================
 
-            const isStaff =
-                interaction.member?.roles?.cache?.has(
-                    process.env.STAFF_ROLE_ID
-                ) ||
-                interaction.member?.roles?.cache?.has(
-                    '1499382533803085975'
-                );
+            const isStaff = isStaffMember(interaction.member);
 
 
             // =========================
@@ -530,7 +548,7 @@ client.on(
                                     '**Fear RP** – Value your life and act realistically when threatened.\n' +
                                     '**Scenes** – Keep scenes realistic, under 30 minutes unless approved, and do not interfere with other active scenes.\n' +
                                     '**Leaving Scenes** – Do not leave the game during an active RP scene.\n' +
-                                    '**Roleplay Quality** – Stay in character, avoid trolling/OOC during scenes, don’t start scenes in Safezones, and avoid repeating identical scenarios.\n' +
+                                    '**Roleplay Quality** – Stay in character, avoid trolling/OOC during scenes, don\u2019t start scenes in Safezones, and avoid repeating identical scenarios.\n' +
                                     '**Suicide/Terrorist RP** – Suicide RP, terrorism, or recreating terrorist events is prohibited.'
                             },
 
@@ -556,7 +574,7 @@ client.on(
                                     '• Firearms may only be used during active scenes.\n' +
                                     '• Staff cannot be taken hostage.\n' +
                                     '• No Random Deathmatch (RDM).\n' +
-                                    '• Use firearms realistically; don’t shoot over minor situations.\n' +
+                                    '• Use firearms realistically; don\u2019t shoot over minor situations.\n' +
                                     '• No unnecessary shooting in public areas.\n' +
                                     '• No open carrying outside RP.\n' +
                                     '• Melee weapons may start scenes if realistic.\n' +
@@ -659,6 +677,9 @@ client.on(
                 report:
                     'report',
 
+                partnerships:
+                    'partnerships',
+
                 other:
                     'other'
             };
@@ -674,17 +695,7 @@ client.on(
             // =========================
 
             const safeUsername =
-                interaction.user.username
-                    .toLowerCase()
-                    .replace(
-                        /[^a-z0-9-_]/g,
-                        ''
-                    )
-                    .slice(
-                        0,
-                        70
-                    ) ||
-                'user';
+                sanitizeName(interaction.user.username, 'user');
 
 
             // =========================
@@ -798,7 +809,7 @@ client.on(
 
                 } else {
 
-                    // NORMAL STAFF ROLE
+                    // NORMAL STAFF ROLE (support / partnerships / other)
                     permissionOverwrites.push({
 
                         id:
@@ -821,6 +832,9 @@ client.on(
 
                         type:
                             0,
+
+                        parent:
+                            TICKET_CATEGORY_ID,
 
                         topic:
                             `ticket-owner:${interaction.user.id};ticket-type:${ticketType}`,
@@ -1207,6 +1221,70 @@ client.on(
                 '❌ Error updating sticky:',
                 error
             );
+        }
+    }
+);
+
+
+// =========================
+// TICKET RENAME COMMAND (-rename)
+// =========================
+// Text-prefix command, staff-only, only works inside ticket channels.
+// Usage: -rename <new-name>
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith('-rename ')) return;
+
+        const topic = message.channel.topic || '';
+        const isTicketChannel = topic.includes('ticket-owner:');
+
+        if (!isTicketChannel) return;
+
+        if (!isStaffMember(message.member)) {
+            await message.reply({
+                content: '❌ Only staff members can rename tickets.'
+            }).catch(() => {});
+            return;
+        }
+
+        const rawName = message.content.slice('-rename '.length).trim();
+
+        if (!rawName) {
+            await message.reply({
+                content: '❌ Usage: `-rename <new-name>`'
+            }).catch(() => {});
+            return;
+        }
+
+        const newName = sanitizeName(rawName, '');
+
+        if (!newName) {
+            await message.reply({
+                content: '❌ That name isn\u2019t valid — use letters, numbers, hyphens, or underscores.'
+            }).catch(() => {});
+            return;
+        }
+
+        try {
+
+            await message.channel.setName(newName);
+
+            await message.reply({
+                content: `✅ Renamed channel to **${newName}**.`
+            });
+
+        } catch (error) {
+
+            console.error('Error renaming channel via -rename:', error);
+
+            await message.reply({
+                content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.'
+            }).catch(() => {});
         }
     }
 );
