@@ -1,25 +1,15 @@
 
 require('dotenv').config();
 
-const {
-    Client,
-    GatewayIntentBits,
-    Partials,
-    Collection,
-    ActivityType,
-    PresenceUpdateStatus,
-    Events,
-    REST,
-    Routes,
-    ContainerBuilder,
-    TextDisplayBuilder,
-    SeparatorBuilder,
-    MessageFlags,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    EmbedBuilder
-} = require('discord.js');
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates
+    ],
+    ...
 
 const fs = require('fs');
 const path = require('path');
