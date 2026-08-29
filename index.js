@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 
 const {
@@ -84,7 +85,7 @@ async function deployCommands() {
     }
 
     const rest = new REST({ version: '10' })
-        .setToken(process.env.BOT_TOKEN);
+        .setToken(process.env.TOKEN);
 
     try {
 
