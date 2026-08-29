@@ -55,51 +55,56 @@ module.exports = {
     const member = interaction.member;
     const guildId = interaction.guildId;
 
-    if (subcommand === 'join') {
-      const voiceChannel = member.voice.channel;
-      if (!voiceChannel) {
-        return interaction.reply({
-          content: '❌ You need to be in a voice channel first.',
-          ephemeral: true,
-        });
-      }
-
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: guildId,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-      });
-
-      try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
-      } catch (err) {
-        connection.destroy();
-        return interaction.reply({
-          content: '❌ Could not join the voice channel.',
-          ephemeral: true,
-        });
-      }
-
-      const player = getPlayer(guildId);
-      connection.subscribe(player);
-
-      return interaction.reply({ content: `✅ Joined **${voiceChannel.name}**.` });
+    // Ack immediately, for every subcommand. Discord only gives a 3s window
+    // to acknowledge — voice connection setup can easily take longer than
+    // that, so we defer first and use editReply everywhere below.
+    try {
+      await interaction.deferReply();
+    } catch (err) {
+      console.error('tts: failed to defer reply:', err);
+      return; // interaction is already dead, nothing more we can do
     }
 
-    if (subcommand === 'say') {
-      const connection = getVoiceConnection(guildId);
-      if (!connection) {
-        return interaction.reply({
-          content: '❌ I need to be in a voice channel first. Use `/tts join`.',
-          ephemeral: true,
+    try {
+      if (subcommand === 'join') {
+        const voiceChannel = member.voice.channel;
+        if (!voiceChannel) {
+          return interaction.editReply({
+            content: '❌ You need to be in a voice channel first.',
+          });
+        }
+
+        const connection = joinVoiceChannel({
+          channelId: voiceChannel.id,
+          guildId: guildId,
+          adapterCreator: interaction.guild.voiceAdapterCreator,
         });
+
+        try {
+          await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+        } catch (err) {
+          connection.destroy();
+          return interaction.editReply({
+            content: '❌ Could not join the voice channel.',
+          });
+        }
+
+        const player = getPlayer(guildId);
+        connection.subscribe(player);
+
+        return interaction.editReply({ content: `✅ Joined **${voiceChannel.name}**.` });
       }
 
-      const text = interaction.options.getString('text');
+      if (subcommand === 'say') {
+        const connection = getVoiceConnection(guildId);
+        if (!connection) {
+          return interaction.editReply({
+            content: '❌ I need to be in a voice channel first. Use `/tts join`.',
+          });
+        }
 
-      await interaction.deferReply();
+        const text = interaction.options.getString('text');
 
-      try {
         const url = googleTTS.getAudioUrl(text, {
           lang: 'en',
           slow: false,
@@ -113,25 +118,28 @@ module.exports = {
         await entersState(player, AudioPlayerStatus.Playing, 10_000).catch(() => {});
 
         return interaction.editReply({ content: `🔊 Speaking: "${text}"` });
-      } catch (err) {
-        console.error('TTS error:', err);
-        return interaction.editReply({ content: '❌ Failed to generate or play speech.' });
-      }
-    }
-
-    if (subcommand === 'leave') {
-      const connection = getVoiceConnection(guildId);
-      if (!connection) {
-        return interaction.reply({
-          content: '❌ I am not in a voice channel.',
-          ephemeral: true,
-        });
       }
 
-      connection.destroy();
-      players.delete(guildId);
+      if (subcommand === 'leave') {
+        const connection = getVoiceConnection(guildId);
+        if (!connection) {
+          return interaction.editReply({
+            content: '❌ I am not in a voice channel.',
+          });
+        }
 
-      return interaction.reply({ content: '👋 Left the voice channel.' });
+        connection.destroy();
+        players.delete(guildId);
+
+        return interaction.editReply({ content: '👋 Left the voice channel.' });
+      }
+    } catch (err) {
+      console.error('tts execute error:', err);
+      try {
+        await interaction.editReply({ content: '❌ Something went wrong running that command.' });
+      } catch (editErr) {
+        console.error('tts: failed to send error editReply:', editErr);
+      }
     }
   },
 };
