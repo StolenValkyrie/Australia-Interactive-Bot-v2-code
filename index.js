@@ -85,7 +85,7 @@ async function deployCommands() {
     }
 
     const rest = new REST({ version: '10' })
-        .setToken(process.env.TOKEN);
+        .setToken(process.env.BOT_TOKEN);
 
     try {
 
@@ -1219,4 +1219,4 @@ client.on(
 console.log('TOKEN exists:', !!process.env.TOKEN);
 console.log('TOKEN length:', process.env.TOKEN?.length);
 
-client.login(process.env.TOKEN);
+client.login(process.env.BOT_TOKEN);
