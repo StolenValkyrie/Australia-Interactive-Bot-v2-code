@@ -48,6 +48,9 @@ client.commands = new Collection();
 // Category all tickets get created under, regardless of type.
 const TICKET_CATEGORY_ID = '1497142936461246464';
 
+// Role pinged and given access on Partnerships tickets specifically.
+const PARTNERSHIPS_ROLE_ID = '1537742446358696022';
+
 // Discord channel names: lowercase, alphanumeric + hyphen/underscore only.
 function sanitizeName(str, fallback = 'ticket') {
     return (
@@ -807,9 +810,27 @@ client.on(
                         ]
                     });
 
+                } else if (
+                    ticketType ===
+                    'partnerships'
+                ) {
+
+                    // PARTNERSHIPS ROLE
+                    permissionOverwrites.push({
+
+                        id:
+                            PARTNERSHIPS_ROLE_ID,
+
+                        allow: [
+                            'ViewChannel',
+                            'SendMessages',
+                            'ReadMessageHistory'
+                        ]
+                    });
+
                 } else {
 
-                    // NORMAL STAFF ROLE (support / partnerships / other)
+                    // NORMAL STAFF ROLE (support / other)
                     permissionOverwrites.push({
 
                         id:
@@ -867,7 +888,11 @@ client.on(
 
                         ? '<@&1499382533803085975>'
 
-                        : `<@&${process.env.STAFF_ROLE_ID}>`;
+                        : ticketType === 'partnerships'
+
+                            ? `<@&${PARTNERSHIPS_ROLE_ID}>`
+
+                            : `<@&${process.env.STAFF_ROLE_ID}>`;
 
 
                 // =========================
