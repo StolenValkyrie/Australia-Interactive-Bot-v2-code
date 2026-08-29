@@ -49,7 +49,7 @@ module.exports = {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder()
                         .setContent(
-                            'Click the **Verify** button below to link your Roblox account with Discord.'
+                            'Verify with roblox to continue to the rest of the server. By the way <@1337622266493534279> is gay and in made in love with me. Send help..'
                         )
                 )
 
