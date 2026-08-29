@@ -157,10 +157,10 @@ client.once(Events.ClientReady, async () => {
         process.env.BOT_STATUS || 'online';
 
     const activityType =
-        process.env.ACTIVITY_TYPE || 'PLAYING';
+        process.env.ACTIVITY_TYPE || 'WATCHING';
 
     const activityName =
-        process.env.ACTIVITY_NAME || 'Discord';
+        process.env.ACTIVITY_NAME || 'Australia Interactive';
 
 
     const activityTypeMap = {
