@@ -1,4 +1,4 @@
-
+```js
 const {
     SlashCommandBuilder,
     ContainerBuilder,
@@ -16,16 +16,16 @@ module.exports = {
 
     data: new SlashCommandBuilder()
         .setName('verify')
-        .setDescription('Verify your Roblox account'),
+        .setDescription('Send the Roblox verification panel'),
 
     async execute(interaction) {
 
-        await interaction.deferReply({
-            flags: MessageFlags.Ephemeral
-        });
-
         const apiKey = process.env.DOCK_API_KEY;
         const pid = process.env.DOCK_PID;
+
+        // =========================
+        // CHECK CONFIGURATION
+        // =========================
 
         if (!apiKey || !pid) {
 
@@ -33,13 +33,19 @@ module.exports = {
                 'DOCK_API_KEY or DOCK_PID is missing.'
             );
 
-            return interaction.editReply({
+            return interaction.reply({
                 content:
-                    '❌ Verification is not configured correctly.'
+                    '❌ Verification is not configured correctly.',
+                flags:
+                    MessageFlags.Ephemeral
             });
         }
 
         try {
+
+            // =========================
+            // CREATE DOCK SESSION
+            // =========================
 
             const response = await fetch(
                 `${API_URL}/v2/sessions`,
@@ -79,9 +85,11 @@ module.exports = {
                     result
                 );
 
-                return interaction.editReply({
+                return interaction.reply({
                     content:
-                        '❌ Could not create a verification session.'
+                        '❌ Could not create a verification session.',
+                    flags:
+                        MessageFlags.Ephemeral
                 });
             }
 
@@ -91,23 +99,28 @@ module.exports = {
             if (!session?.verifyUrl) {
 
                 console.error(
-                    'No verification URL returned:',
+                    'Dock did not return a verification URL:',
                     result
                 );
 
-                return interaction.editReply({
+                return interaction.reply({
                     content:
-                        '❌ Dock did not return a verification URL.'
+                        '❌ Dock did not return a verification URL.',
+                    flags:
+                        MessageFlags.Ephemeral
                 });
             }
 
             // =========================
-            // COMPONENTS V2 EMBED
+            // CREATE COMPONENTS V2 PANEL
             // =========================
 
             const container =
                 new ContainerBuilder()
-                    .setAccentColor(0x5865F2)
+
+                    .setAccentColor(
+                        0x5865F2
+                    )
 
                     .addTextDisplayComponents(
 
@@ -128,7 +141,7 @@ module.exports = {
 
                         new TextDisplayBuilder()
                             .setContent(
-                                'Click the **Verify** button below to connect your Roblox account to Discord.'
+                                '### Verify your Roblox account'
                             )
                     )
 
@@ -136,7 +149,8 @@ module.exports = {
 
                         new TextDisplayBuilder()
                             .setContent(
-                                'Once you have completed the verification process, you will be linked automatically.'
+                                'Click the **Verify** button below to connect your Roblox account to Discord.\n\n' +
+                                'You will be redirected to Dock to complete the verification process.'
                             )
                     )
 
@@ -154,9 +168,13 @@ module.exports = {
 
                                 new ButtonBuilder()
 
-                                    .setLabel('Verify')
+                                    .setLabel(
+                                        'Verify'
+                                    )
 
-                                    .setEmoji('🔗')
+                                    .setEmoji(
+                                        '🔗'
+                                    )
 
                                     .setStyle(
                                         ButtonStyle.Link
@@ -168,12 +186,29 @@ module.exports = {
                             )
                     );
 
-            return interaction.editReply({
+            // =========================
+            // SEND PANEL TO CHANNEL
+            // =========================
 
-                components: [container],
+            await interaction.channel.send({
+
+                components:
+                    [container],
 
                 flags:
-                    MessageFlags.IsComponentsV2 |
+                    MessageFlags.IsComponentsV2
+            });
+
+            // =========================
+            // HIDE SLASH COMMAND RESPONSE
+            // =========================
+
+            await interaction.reply({
+
+                content:
+                    '✅ Verification panel sent!',
+
+                flags:
                     MessageFlags.Ephemeral
             });
 
@@ -184,10 +219,18 @@ module.exports = {
                 error
             );
 
-            return interaction.editReply({
-                content:
-                    '❌ An error occurred while starting verification.'
-            });
+            if (!interaction.replied) {
+
+                await interaction.reply({
+
+                    content:
+                        '❌ An error occurred while creating the verification panel.',
+
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
         }
     }
 };
+```
