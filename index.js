@@ -69,6 +69,34 @@ function isStaffMember(member) {
     );
 }
 
+// =========================
+// TICKET CLAIM STORE
+// =========================
+// Claim state lives here instead of the channel topic. Discord shares one
+// rate-limit bucket (2 changes / 10 min) across BOTH name and topic edits
+// on a channel — if claim/unclaim kept calling setTopic(), it was eating
+// the same budget -rename needs. Tracking claims in a file avoids ever
+// touching name/topic during claim/unclaim.
+
+const claimsFile = path.join(__dirname, 'data', 'claims.json');
+
+function loadClaims() {
+    try {
+        return JSON.parse(fs.readFileSync(claimsFile, 'utf8'));
+    } catch (error) {
+        return {};
+    }
+}
+
+function saveClaims(claims) {
+    try {
+        fs.mkdirSync(path.dirname(claimsFile), { recursive: true });
+        fs.writeFileSync(claimsFile, JSON.stringify(claims, null, 4));
+    } catch (error) {
+        console.error('❌ Could not write claims.json:', error);
+    }
+}
+
 
 // =========================
 // LOAD COMMANDS
@@ -157,10 +185,10 @@ client.once(Events.ClientReady, async () => {
         process.env.BOT_STATUS || 'online';
 
     const activityType =
-        process.env.ACTIVITY_TYPE || 'WATCHING';
+        process.env.ACTIVITY_TYPE || 'PLAYING';
 
     const activityName =
-        process.env.ACTIVITY_NAME || 'Australia Interactive';
+        process.env.ACTIVITY_NAME || 'Discord';
 
 
     const activityTypeMap = {
@@ -262,20 +290,14 @@ client.on(
                 }
 
 
-                const topic =
-                    interaction.channel.topic || '';
+                const claims = loadClaims();
+                const existingClaim = claims[interaction.channel.id];
 
 
-                const claimedMatch =
-                    topic.match(
-                        /claimed-by:(\d+)/
-                    );
-
-
-                if (claimedMatch) {
+                if (existingClaim) {
 
                     const claimedUserId =
-                        claimedMatch[1];
+                        existingClaim.claimedBy;
 
 
                     if (
@@ -319,15 +341,11 @@ client.on(
                 }
 
 
-                const newTopic =
-                    topic
-                        ? `${topic};claimed-by:${interaction.user.id}`
-                        : `claimed-by:${interaction.user.id}`;
+                claims[interaction.channel.id] = {
+                    claimedBy: interaction.user.id
+                };
 
-
-                await interaction.channel.setTopic(
-                    newTopic
-                );
+                saveClaims(claims);
 
 
                 await interaction.reply({
@@ -364,17 +382,11 @@ client.on(
                 }
 
 
-                const topic =
-                    interaction.channel.topic || '';
+                const claims = loadClaims();
+                const existingClaim = claims[interaction.channel.id];
 
 
-                const claimedMatch =
-                    topic.match(
-                        /claimed-by:(\d+)/
-                    );
-
-
-                if (!claimedMatch) {
+                if (!existingClaim) {
 
                     await interaction.reply({
 
@@ -390,7 +402,7 @@ client.on(
 
 
                 const claimedUserId =
-                    claimedMatch[1];
+                    existingClaim.claimedBy;
 
 
                 if (
@@ -411,16 +423,9 @@ client.on(
                 }
 
 
-                const newTopic =
-                    topic.replace(
-                        /;?claimed-by:\d+/,
-                        ''
-                    );
+                delete claims[interaction.channel.id];
 
-
-                await interaction.channel.setTopic(
-                    newTopic || null
-                );
+                saveClaims(claims);
 
 
                 await interaction.reply({
@@ -471,6 +476,13 @@ client.on(
                     async () => {
 
                         try {
+
+                            const claims = loadClaims();
+
+                            if (claims[interaction.channel.id]) {
+                                delete claims[interaction.channel.id];
+                                saveClaims(claims);
+                            }
 
                             await interaction.channel.delete();
 
@@ -1309,6 +1321,214 @@ client.on(
 
             await message.reply({
                 content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.'
+            }).catch(() => {});
+        }
+    }
+);
+
+
+// =========================
+// GENERIC PREFIX COMMANDS (-command)
+// =========================
+// Lets every slash command also run as a "-command" text message, reusing
+// the same command.execute() logic by faking a minimal interaction object.
+//
+// Limitations:
+// - Ephemeral replies aren't private in a text message — they just post
+//   normally in the channel.
+// - Multi-argument commands (e.g. a command needing a user AND a reason)
+//   aren't parsed apart — everything after the (sub)command is passed as
+//   one string to any getString() call. Commands with a single text
+//   argument (like /tts say) work fine; commands expecting multiple
+//   distinct options may need their command file adjusted for proper
+//   text-command parsing.
+
+const PREFIX = '-';
+
+function getSubcommandNames(command) {
+    try {
+        const json = command.data.toJSON();
+        return (json.options || [])
+            .filter(opt => opt.type === 1) // ApplicationCommandOptionType.Subcommand
+            .map(opt => opt.name);
+    } catch (error) {
+        return [];
+    }
+}
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith(PREFIX)) return;
+
+        // Already handled by the dedicated -rename listener above.
+        if (message.content.startsWith('-rename ')) return;
+
+        const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+        const commandName = (args.shift() || '').toLowerCase();
+
+        if (!commandName) return;
+
+        const command = client.commands.get(commandName);
+        if (!command) return; // not a recognized command — ignore silently
+
+
+        // =========================
+        // PERMISSION CHECK
+        // =========================
+        // Mirrors whatever setDefaultMemberPermissions() the slash command
+        // was given, so -command can't bypass restrictions /command has.
+
+        let requiredPerms = null;
+
+        try {
+            requiredPerms = command.data.toJSON().default_member_permissions;
+        } catch (error) {
+            requiredPerms = null;
+        }
+
+        if (requiredPerms) {
+
+            const hasPerms =
+                message.member?.permissions?.has(BigInt(requiredPerms));
+
+            if (!hasPerms) {
+
+                await message.reply({
+                    content: '❌ You do not have permission to use this command.'
+                }).catch(() => {});
+
+                return;
+            }
+        }
+
+
+        // =========================
+        // FAKE INTERACTION
+        // =========================
+
+        const subcommandNames = getSubcommandNames(command);
+
+        let sentMessage = null;
+        let deferredFlag = false;
+        let repliedFlag = false;
+
+        const fakeInteraction = {
+
+            commandName,
+            user: message.author,
+            member: message.member,
+            guild: message.guild,
+            guildId: message.guild.id,
+            channel: message.channel,
+            client: message.client,
+
+            isChatInputCommand: () => true,
+
+            get replied() {
+                return repliedFlag;
+            },
+
+            get deferred() {
+                return deferredFlag;
+            },
+
+            options: {
+
+                getSubcommand(required = true) {
+
+                    const first = (args[0] || '').toLowerCase();
+
+                    if (subcommandNames.includes(first)) {
+                        return args.shift().toLowerCase();
+                    }
+
+                    if (required) {
+                        throw new Error(
+                            `Missing subcommand. Usage: -${commandName} <${subcommandNames.join('|')}>`
+                        );
+                    }
+
+                    return null;
+                },
+
+                getString(name, required = false) {
+                    const value = args.join(' ').trim();
+                    return value || null;
+                },
+            },
+
+            deferReply: async () => {
+                deferredFlag = true;
+                await message.channel.sendTyping().catch(() => {});
+            },
+
+            reply: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                sentMessage = await message.reply({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+
+                repliedFlag = true;
+
+                return sentMessage;
+            },
+
+            editReply: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                if (sentMessage) {
+                    return sentMessage.edit({
+                        content,
+                        embeds: payload?.embeds,
+                        components: payload?.components,
+                    }).catch(() => null);
+                }
+
+                sentMessage = await message.reply({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+
+                repliedFlag = true;
+
+                return sentMessage;
+            },
+
+            followUp: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                return message.channel.send({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+            },
+        };
+
+        try {
+
+            await command.execute(fakeInteraction);
+
+        } catch (error) {
+
+            console.error(`Error executing -${commandName}:`, error);
+
+            await message.reply({
+                content: `❌ ${error.message || 'Something went wrong running that command.'}`
             }).catch(() => {});
         }
     }
