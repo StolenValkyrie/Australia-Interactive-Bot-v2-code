@@ -1216,6 +1216,7 @@ client.on(
 // LOGIN
 // =========================
 
-client.login(
-    process.env.TOKEN
-);
+console.log('TOKEN exists:', !!process.env.TOKEN);
+console.log('TOKEN length:', process.env.TOKEN?.length);
+
+client.login(process.env.TOKEN);
