@@ -250,6 +250,128 @@ client.once(Events.ClientReady, async () => {
 client.on(
     Events.InteractionCreate,
     async interaction => {
+        
+// =========================
+// DOCK VERIFICATION
+// =========================
+
+if (
+    interaction.isButton() &&
+    interaction.customId === 'dock_verify'
+) {
+
+    try {
+
+        const response = await fetch(
+            'https://api.docksys.xyz/api/v1/verify/session',
+            {
+                method: 'POST',
+
+                headers: {
+                    Authorization:
+                        `Bearer ${process.env.DOCK_API_KEY}`,
+
+                    'Content-Type':
+                        'application/json'
+                },
+
+                body: JSON.stringify({
+                    pid:
+                        process.env.DOCK_PID,
+
+                    clientId:
+                        interaction.user.id,
+
+                    guildId:
+                        interaction.guild.id
+                })
+            }
+        );
+
+        const payload =
+            await response.json();
+
+        console.log('Dock response:', payload);
+
+        if (!response.ok) {
+
+            await interaction.reply({
+                content:
+                    '❌ Could not create your verification session. Please try again later.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
+
+        const verifyUrl =
+            payload?.data?.verifyUrl;
+
+        if (!verifyUrl) {
+
+            console.error(
+                'No verifyUrl returned by Dock:',
+                payload
+            );
+
+            await interaction.reply({
+                content:
+                    '❌ Dock did not return a verification link.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
+
+        const verifyButton =
+            new ButtonBuilder()
+                .setLabel('Verify with Dock')
+                .setStyle(ButtonStyle.Link)
+                .setURL(verifyUrl);
+
+        const row =
+            new ActionRowBuilder()
+                .addComponents(
+                    verifyButton
+                );
+
+        await interaction.reply({
+            content:
+                '🔗 Click the button below to verify your Roblox account:',
+
+            components:
+                [row],
+
+            flags:
+                MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+
+        console.error(
+            'Dock verification error:',
+            error
+        );
+
+        if (!interaction.replied) {
+
+            await interaction.reply({
+                content:
+                    '❌ Something went wrong while creating your verification session.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    return;
+}
+
 
 
         // =========================
