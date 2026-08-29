@@ -22,6 +22,9 @@ const players = new Map(); // guildId -> AudioPlayer
 function getPlayer(guildId) {
   if (!players.has(guildId)) {
     const player = createAudioPlayer();
+    player.on('error', err => {
+      console.error(`tts: player error (guild ${guildId}):`, err);
+    });
     players.set(guildId, player);
   }
   return players.get(guildId);
@@ -89,6 +92,10 @@ module.exports = {
           channelId: voiceChannel.id,
           guildId: guildId,
           adapterCreator: interaction.guild.voiceAdapterCreator,
+        });
+
+        connection.on('stateChange', (oldState, newState) => {
+          console.log(`tts: voice connection ${oldState.status} -> ${newState.status}`);
         });
 
         try {
