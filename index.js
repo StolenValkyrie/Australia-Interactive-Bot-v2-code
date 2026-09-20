@@ -1,27 +1,26 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 
 const {
     Client,
     GatewayIntentBits,
     Partials,
     Collection,
+    Events,
     ActivityType,
     PresenceUpdateStatus,
-    Events,
     REST,
     Routes,
+    MessageFlags,
+    EmbedBuilder,
     ContainerBuilder,
     TextDisplayBuilder,
     SeparatorBuilder,
-    MessageFlags,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    EmbedBuilder
+    ButtonStyle
 } = require('discord.js');
-
-const fs = require('fs');
-const path = require('path');
 
 // Role pinged / given access on ban appeal tickets (from /appeals)
 const APPEALS_ROLE_ID = '1497464387429073037';
@@ -31,9 +30,9 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates
     ],
-
     partials: [
         Partials.Channel,
         Partials.Message,
@@ -42,7 +41,173 @@ const client = new Client({
     ]
 });
 
+require('./logger.js')(client);
 client.commands = new Collection();
+
+// =========================
+// SHARED CONSTANTS / HELPERS
+// =========================
+
+// Category all tickets get created under, regardless of type.
+const TICKET_CATEGORY_ID = '1497142936461246464';
+
+// Role pinged and given access on Partnerships tickets specifically.
+const PARTNERSHIPS_ROLE_ID = '1537742446358696022';
+
+// Discord channel names: lowercase, alphanumeric + hyphen/underscore only.
+function sanitizeName(str, fallback = 'ticket') {
+    return (
+        (str || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9-_]/g, '')
+            .slice(0, 90) || fallback
+    );
+}
+
+function isStaffMember(member) {
+    return (
+        member?.roles?.cache?.has(process.env.STAFF_ROLE_ID) ||
+        member?.roles?.cache?.has('1499382533803085975') ||
+        false
+    );
+}
+
+// =========================
+// TICKET CLAIM STORE
+// =========================
+// Claim state lives here instead of the channel topic. Discord shares one
+// rate-limit bucket (2 changes / 10 min) across BOTH name and topic edits
+// on a channel — if claim/unclaim kept calling setTopic(), it was eating
+// the same budget -rename needs. Tracking claims in a file avoids ever
+// touching name/topic during claim/unclaim.
+
+const claimsFile = path.join(__dirname, 'data', 'claims.json');
+
+function loadClaims() {
+    try {
+        return JSON.parse(fs.readFileSync(claimsFile, 'utf8'));
+    } catch (error) {
+        return {};
+    }
+}
+
+function saveClaims(claims) {
+    try {
+        fs.mkdirSync(path.dirname(claimsFile), { recursive: true });
+        fs.writeFileSync(claimsFile, JSON.stringify(claims, null, 4));
+    } catch (error) {
+        console.error('❌ Could not write claims.json:', error);
+    }
+}
+
+// =========================
+// TICKET CLOSE COMMAND (-close)
+// =========================
+// Usage: -close <reason>
+// Staff-only, ticket channels only.
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith('-close')) return;
+
+        // =========================
+        // CHECK TICKET CHANNEL
+        // =========================
+
+        const topic = message.channel.topic || '';
+
+        if (!topic.includes('ticket-owner:')) {
+            return;
+        }
+
+        // =========================
+        // CHECK STAFF
+        // =========================
+
+        if (!isStaffMember(message.member)) {
+
+            await message.reply({
+                content:
+                    '❌ Only staff members can close tickets.'
+            }).catch(() => {});
+
+            return;
+        }
+
+        // =========================
+        // GET REASON
+        // =========================
+
+        const reason =
+            message.content
+                .slice('-close'.length)
+                .trim();
+
+        if (!reason) {
+
+            await message.reply({
+                content:
+                    '❌ Please provide a reason.\nUsage: `-close <reason>`'
+            }).catch(() => {});
+
+            return;
+        }
+
+        // =========================
+        // CLOSING MESSAGE
+        // =========================
+
+        await message.channel.send({
+            content:
+                `🔒 **Ticket Closing**\n\n` +
+                `**Closed by:** ${message.author}\n` +
+                `**Reason:** ${reason}\n\n` +
+                `This ticket will be closed shortly.`
+        }).catch(() => {});
+
+        // =========================
+        // DELETE AFTER DELAY
+        // =========================
+
+        setTimeout(
+            async () => {
+
+                try {
+
+                    const claims = loadClaims();
+
+                    if (
+                        claims[message.channel.id]
+                    ) {
+
+                        delete claims[
+                            message.channel.id
+                        ];
+
+                        saveClaims(claims);
+                    }
+
+                    await message.channel.delete();
+
+                } catch (error) {
+
+                    console.error(
+                        'Error closing ticket with -close:',
+                        error
+                    );
+
+                }
+
+            },
+            1500
+        );
+
+    }
+);
 
 
 // =========================
@@ -197,6 +362,128 @@ client.once(Events.ClientReady, async () => {
 client.on(
     Events.InteractionCreate,
     async interaction => {
+        
+// =========================
+// DOCK VERIFICATION
+// =========================
+
+if (
+    interaction.isButton() &&
+    interaction.customId === 'dock_verify'
+) {
+
+    try {
+
+        const response = await fetch(
+            'https://api.docksys.xyz/api/v1/verify/session',
+            {
+                method: 'POST',
+
+                headers: {
+                    Authorization:
+                        `Bearer ${process.env.DOCK_API_KEY}`,
+
+                    'Content-Type':
+                        'application/json'
+                },
+
+                body: JSON.stringify({
+                    pid:
+                        process.env.DOCK_PID,
+
+                    clientId:
+                        interaction.user.id,
+
+                    guildId:
+                        interaction.guild.id
+                })
+            }
+        );
+
+        const payload =
+            await response.json();
+
+        console.log('Dock response:', payload);
+
+        if (!response.ok) {
+
+            await interaction.reply({
+                content:
+                    '❌ Could not create your verification session. Please try again later.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
+
+        const verifyUrl =
+            payload?.data?.verifyUrl;
+
+        if (!verifyUrl) {
+
+            console.error(
+                'No verifyUrl returned by Dock:',
+                payload
+            );
+
+            await interaction.reply({
+                content:
+                    '❌ Dock did not return a verification link.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+
+            return;
+        }
+
+        const verifyButton =
+            new ButtonBuilder()
+                .setLabel('Verify with Dock')
+                .setStyle(ButtonStyle.Link)
+                .setURL(verifyUrl);
+
+        const row =
+            new ActionRowBuilder()
+                .addComponents(
+                    verifyButton
+                );
+
+        await interaction.reply({
+            content:
+                '🔗 Click the button below to verify your Roblox account:',
+
+            components:
+                [row],
+
+            flags:
+                MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+
+        console.error(
+            'Dock verification error:',
+            error
+        );
+
+        if (!interaction.replied) {
+
+            await interaction.reply({
+                content:
+                    '❌ Something went wrong while creating your verification session.',
+
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    return;
+}
+
 
 
         // =========================
@@ -210,13 +497,7 @@ client.on(
             // CHECK STAFF
             // =========================
 
-            const isStaff =
-                interaction.member?.roles?.cache?.has(
-                    process.env.STAFF_ROLE_ID
-                ) ||
-                interaction.member?.roles?.cache?.has(
-                    '1499382533803085975'
-                );
+            const isStaff = isStaffMember(interaction.member);
 
 
             // =========================
@@ -243,20 +524,14 @@ client.on(
                 }
 
 
-                const topic =
-                    interaction.channel.topic || '';
+                const claims = loadClaims();
+                const existingClaim = claims[interaction.channel.id];
 
 
-                const claimedMatch =
-                    topic.match(
-                        /claimed-by:(\d+)/
-                    );
-
-
-                if (claimedMatch) {
+                if (existingClaim) {
 
                     const claimedUserId =
-                        claimedMatch[1];
+                        existingClaim.claimedBy;
 
 
                     if (
@@ -300,15 +575,11 @@ client.on(
                 }
 
 
-                const newTopic =
-                    topic
-                        ? `${topic};claimed-by:${interaction.user.id}`
-                        : `claimed-by:${interaction.user.id}`;
+                claims[interaction.channel.id] = {
+                    claimedBy: interaction.user.id
+                };
 
-
-                await interaction.channel.setTopic(
-                    newTopic
-                );
+                saveClaims(claims);
 
 
                 await interaction.reply({
@@ -345,17 +616,11 @@ client.on(
                 }
 
 
-                const topic =
-                    interaction.channel.topic || '';
+                const claims = loadClaims();
+                const existingClaim = claims[interaction.channel.id];
 
 
-                const claimedMatch =
-                    topic.match(
-                        /claimed-by:(\d+)/
-                    );
-
-
-                if (!claimedMatch) {
+                if (!existingClaim) {
 
                     await interaction.reply({
 
@@ -371,7 +636,7 @@ client.on(
 
 
                 const claimedUserId =
-                    claimedMatch[1];
+                    existingClaim.claimedBy;
 
 
                 if (
@@ -392,16 +657,9 @@ client.on(
                 }
 
 
-                const newTopic =
-                    topic.replace(
-                        /;?claimed-by:\d+/,
-                        ''
-                    );
+                delete claims[interaction.channel.id];
 
-
-                await interaction.channel.setTopic(
-                    newTopic || null
-                );
+                saveClaims(claims);
 
 
                 await interaction.reply({
@@ -452,6 +710,13 @@ client.on(
                     async () => {
 
                         try {
+
+                            const claims = loadClaims();
+
+                            if (claims[interaction.channel.id]) {
+                                delete claims[interaction.channel.id];
+                                saveClaims(claims);
+                            }
 
                             await interaction.channel.delete();
 
@@ -538,7 +803,7 @@ client.on(
                                     '**Fear RP** – Value your life and act realistically when threatened.\n' +
                                     '**Scenes** – Keep scenes realistic, under 30 minutes unless approved, and do not interfere with other active scenes.\n' +
                                     '**Leaving Scenes** – Do not leave the game during an active RP scene.\n' +
-                                    '**Roleplay Quality** – Stay in character, avoid trolling/OOC during scenes, don’t start scenes in Safezones, and avoid repeating identical scenarios.\n' +
+                                    '**Roleplay Quality** – Stay in character, avoid trolling/OOC during scenes, don\u2019t start scenes in Safezones, and avoid repeating identical scenarios.\n' +
                                     '**Suicide/Terrorist RP** – Suicide RP, terrorism, or recreating terrorist events is prohibited.'
                             },
 
@@ -564,7 +829,7 @@ client.on(
                                     '• Firearms may only be used during active scenes.\n' +
                                     '• Staff cannot be taken hostage.\n' +
                                     '• No Random Deathmatch (RDM).\n' +
-                                    '• Use firearms realistically; don’t shoot over minor situations.\n' +
+                                    '• Use firearms realistically; don\u2019t shoot over minor situations.\n' +
                                     '• No unnecessary shooting in public areas.\n' +
                                     '• No open carrying outside RP.\n' +
                                     '• Melee weapons may start scenes if realistic.\n' +
@@ -667,6 +932,9 @@ client.on(
                 report:
                     'report',
 
+                partnerships:
+                    'partnerships',
+
                 other:
                     'other',
 
@@ -712,17 +980,7 @@ client.on(
             // =========================
 
             const safeUsername =
-                interaction.user.username
-                    .toLowerCase()
-                    .replace(
-                        /[^a-z0-9-_]/g,
-                        ''
-                    )
-                    .slice(
-                        0,
-                        70
-                    ) ||
-                'user';
+                sanitizeName(interaction.user.username, 'user');
 
 
             // =========================
@@ -851,6 +1109,24 @@ client.on(
                         ]
                     });
 
+                } else if (
+                    ticketType ===
+                    'partnerships'
+                ) {
+
+                    // PARTNERSHIPS ROLE
+                    permissionOverwrites.push({
+
+                        id:
+                            PARTNERSHIPS_ROLE_ID,
+
+                        allow: [
+                            'ViewChannel',
+                            'SendMessages',
+                            'ReadMessageHistory'
+                        ]
+                    });
+
                 } else {
 
                     // NORMAL STAFF ROLE
@@ -877,6 +1153,9 @@ client.on(
 
                         type:
                             0,
+
+                        parent:
+                            TICKET_CATEGORY_ID,
 
                         topic:
                             `ticket-owner:${interaction.user.id};ticket-type:${ticketType}`,
@@ -912,6 +1191,10 @@ client.on(
                         : ticketType === 'report'
 
                             ? '<@&1499382533803085975>'
+
+                            : ticketType === 'partnerships'
+
+                                ? `<@&${PARTNERSHIPS_ROLE_ID}>`
 
                             : `<@&${process.env.STAFF_ROLE_ID}>`;
 
@@ -1273,9 +1556,279 @@ client.on(
 
 
 // =========================
+// TICKET RENAME COMMAND (-rename)
+// =========================
+// Text-prefix command, staff-only, only works inside ticket channels.
+// Usage: -rename <new-name>
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith('-rename ')) return;
+
+        const topic = message.channel.topic || '';
+        const isTicketChannel = topic.includes('ticket-owner:');
+
+        if (!isTicketChannel) return;
+
+        if (!isStaffMember(message.member)) {
+            await message.reply({
+                content: '❌ Only staff members can rename tickets.'
+            }).catch(() => {});
+            return;
+        }
+
+        const rawName = message.content.slice('-rename '.length).trim();
+
+        if (!rawName) {
+            await message.reply({
+                content: '❌ Usage: `-rename <new-name>`'
+            }).catch(() => {});
+            return;
+        }
+
+        const newName = sanitizeName(rawName, '');
+
+        if (!newName) {
+            await message.reply({
+                content: '❌ That name isn\u2019t valid — use letters, numbers, hyphens, or underscores.'
+            }).catch(() => {});
+            return;
+        }
+
+        try {
+
+            await message.channel.setName(newName);
+
+            await message.reply({
+                content: `✅ Renamed channel to **${newName}**.`
+            });
+
+        } catch (error) {
+
+            console.error('Error renaming channel via -rename:', error);
+
+            await message.reply({
+                content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.'
+            }).catch(() => {});
+        }
+    }
+);
+
+
+// =========================
+// GENERIC PREFIX COMMANDS (-command)
+// =========================
+// Lets every slash command also run as a "-command" text message, reusing
+// the same command.execute() logic by faking a minimal interaction object.
+//
+// Limitations:
+// - Ephemeral replies aren't private in a text message — they just post
+//   normally in the channel.
+// - Multi-argument commands (e.g. a command needing a user AND a reason)
+//   aren't parsed apart — everything after the (sub)command is passed as
+//   one string to any getString() call. Commands with a single text
+//   argument (like /tts say) work fine; commands expecting multiple
+//   distinct options may need their command file adjusted for proper
+//   text-command parsing.
+
+const PREFIX = '-';
+
+function getSubcommandNames(command) {
+    try {
+        const json = command.data.toJSON();
+        return (json.options || [])
+            .filter(opt => opt.type === 1) // ApplicationCommandOptionType.Subcommand
+            .map(opt => opt.name);
+    } catch (error) {
+        return [];
+    }
+}
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+        if (!message.content.startsWith(PREFIX)) return;
+
+        // Already handled by the dedicated -rename listener above.
+        if (message.content.startsWith('-rename ')) return;
+
+        const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+        const commandName = (args.shift() || '').toLowerCase();
+
+        if (!commandName) return;
+
+        const command = client.commands.get(commandName);
+        if (!command) return; // not a recognized command — ignore silently
+
+
+        // =========================
+        // PERMISSION CHECK
+        // =========================
+        // Mirrors whatever setDefaultMemberPermissions() the slash command
+        // was given, so -command can't bypass restrictions /command has.
+
+        let requiredPerms = null;
+
+        try {
+            requiredPerms = command.data.toJSON().default_member_permissions;
+        } catch (error) {
+            requiredPerms = null;
+        }
+
+        if (requiredPerms) {
+
+            const hasPerms =
+                message.member?.permissions?.has(BigInt(requiredPerms));
+
+            if (!hasPerms) {
+
+                await message.reply({
+                    content: '❌ You do not have permission to use this command.'
+                }).catch(() => {});
+
+                return;
+            }
+        }
+
+
+        // =========================
+        // FAKE INTERACTION
+        // =========================
+
+        const subcommandNames = getSubcommandNames(command);
+
+        let sentMessage = null;
+        let deferredFlag = false;
+        let repliedFlag = false;
+
+        const fakeInteraction = {
+
+            commandName,
+            user: message.author,
+            member: message.member,
+            guild: message.guild,
+            guildId: message.guild.id,
+            channel: message.channel,
+            client: message.client,
+
+            isChatInputCommand: () => true,
+
+            get replied() {
+                return repliedFlag;
+            },
+
+            get deferred() {
+                return deferredFlag;
+            },
+
+            options: {
+
+                getSubcommand(required = true) {
+
+                    const first = (args[0] || '').toLowerCase();
+
+                    if (subcommandNames.includes(first)) {
+                        return args.shift().toLowerCase();
+                    }
+
+                    if (required) {
+                        throw new Error(
+                            `Missing subcommand. Usage: -${commandName} <${subcommandNames.join('|')}>`
+                        );
+                    }
+
+                    return null;
+                },
+
+                getString(name, required = false) {
+                    const value = args.join(' ').trim();
+                    return value || null;
+                },
+            },
+
+            deferReply: async () => {
+                deferredFlag = true;
+                await message.channel.sendTyping().catch(() => {});
+            },
+
+            reply: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                sentMessage = await message.reply({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+
+                repliedFlag = true;
+
+                return sentMessage;
+            },
+
+            editReply: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                if (sentMessage) {
+                    return sentMessage.edit({
+                        content,
+                        embeds: payload?.embeds,
+                        components: payload?.components,
+                    }).catch(() => null);
+                }
+
+                sentMessage = await message.reply({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+
+                repliedFlag = true;
+
+                return sentMessage;
+            },
+
+            followUp: async payload => {
+
+                const content =
+                    typeof payload === 'string' ? payload : payload.content;
+
+                return message.channel.send({
+                    content,
+                    embeds: payload?.embeds,
+                    components: payload?.components,
+                }).catch(() => null);
+            },
+        };
+
+        try {
+
+            await command.execute(fakeInteraction);
+
+        } catch (error) {
+
+            console.error(`Error executing -${commandName}:`, error);
+
+            await message.reply({
+                content: `❌ ${error.message || 'Something went wrong running that command.'}`
+            }).catch(() => {});
+        }
+    }
+);
+
+
+// =========================
 // LOGIN
 // =========================
 
-client.login(
-    process.env.BOT_TOKEN
-);
+client.login(process.env.BOT_TOKEN);
