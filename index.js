@@ -23,6 +23,9 @@ const {
 const fs = require('fs');
 const path = require('path');
 
+// Role pinged / given access on ban appeal tickets (from /appeals)
+const APPEALS_ROLE_ID = '1497464387429073037';
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -481,11 +484,16 @@ client.on(
         ) {
 
             if (
-                interaction.customId !==
-                'ticket_select'
+                interaction.customId !== 'ticket_select' &&
+                interaction.customId !== 'appeals_select'
             ) {
                 return;
             }
+
+
+            // Whether this selection came from /appeals rather than /dashboard
+            const isAppeal =
+                interaction.customId === 'appeals_select';
 
 
             const selected =
@@ -497,6 +505,7 @@ client.on(
             // =========================
 
             if (
+                !isAppeal &&
                 selected ===
                 'guidelines'
             ) {
@@ -659,13 +668,43 @@ client.on(
                     'report',
 
                 other:
-                    'other'
+                    'other',
+
+                discord_ban_appeal:
+                    'discord-ban-appeal',
+
+                game_ban_appeal:
+                    'game-ban-appeal'
+            };
+
+
+            // Nicely formatted names shown in messages/titles
+            const ticketDisplayNames = {
+
+                support:
+                    'Support',
+
+                report:
+                    'Report',
+
+                other:
+                    'Other',
+
+                'discord-ban-appeal':
+                    'Discord Ban Appeal',
+
+                'game-ban-appeal':
+                    'Game Ban Appeal'
             };
 
 
             const ticketType =
                 ticketNames[selected] ||
                 'other';
+
+            const ticketDisplay =
+                ticketDisplayNames[ticketType] ||
+                ticketType;
 
 
             // =========================
@@ -778,6 +817,23 @@ client.on(
                 // =========================
 
                 if (
+                    isAppeal
+                ) {
+
+                    // BAN APPEALS ROLE ONLY
+                    permissionOverwrites.push({
+
+                        id:
+                            APPEALS_ROLE_ID,
+
+                        allow: [
+                            'ViewChannel',
+                            'SendMessages',
+                            'ReadMessageHistory'
+                        ]
+                    });
+
+                } else if (
                     ticketType ===
                     'report'
                 ) {
@@ -798,6 +854,7 @@ client.on(
                 } else {
 
                     // NORMAL STAFF ROLE
+                    // (support, other, discord-ban-appeal, game-ban-appeal)
                     permissionOverwrites.push({
 
                         id:
@@ -836,7 +893,7 @@ client.on(
                 await interaction.reply({
 
                     content:
-                        `✅ Your **${ticketType}** ticket has been created: ${ticketChannel}`,
+                        `✅ Your **${ticketDisplay}** ticket has been created: ${ticketChannel}`,
 
                     flags:
                         MessageFlags.Ephemeral
@@ -848,11 +905,15 @@ client.on(
                 // =========================
 
                 const ticketPing =
-                    ticketType === 'report'
+                    isAppeal
 
-                        ? '<@&1499382533803085975>'
+                        ? `<@&${APPEALS_ROLE_ID}>`
 
-                        : `<@&${process.env.STAFF_ROLE_ID}>`;
+                        : ticketType === 'report'
+
+                            ? '<@&1499382533803085975>'
+
+                            : `<@&${process.env.STAFF_ROLE_ID}>`;
 
 
                 // =========================
@@ -877,7 +938,7 @@ client.on(
 
                                 .setContent(
 
-                                    `# ${ticketType.charAt(0).toUpperCase() + ticketType.slice(1)} Ticket`
+                                    `# ${ticketDisplay} Ticket`
                                 )
                         )
 

@@ -230,7 +230,7 @@ module.exports = {
 
                     // Separator
                     .addSeparatorComponents(
-                        new SeparatorBuilder()
+                        new SeparatorBuilder(
                             .setDivider(true)
                             .setSpacing(1)
                     )
