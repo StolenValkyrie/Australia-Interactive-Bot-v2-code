@@ -1363,7 +1363,7 @@ if (
                     await interaction.reply({
 
                         content:
-                            '❌ There was an error while creating the ticket!',
+                            'There was an error while creating the ticket!',
 
                         flags:
                             MessageFlags.Ephemeral

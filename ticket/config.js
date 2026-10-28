@@ -2,19 +2,17 @@ module.exports = {
   // images
   images: {
     banner: 'PASTE_BANNER_IMAGE_URL_HERE', // the big "SUPPORT" image at the top
-    // Pre-filled with the footer your other panels use. Swap it if the old ticket bar was different.
+
     footer: 'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png',
   },
 
-  // Accent colour bar on the left of the cards. null = none (like your old tickets).
-  // Use e.g. 0x5865F2 to match your other panels.
   accentColor: null,
 
   // Channel the /supportpanel command posts the panel in. '' = the channel you run it in.
   panelChannelId: '1563481620978335744',
 
   // ids
-  staffRoleIds: [process.env.STAFF_ROLE_ID, '1495734364347043880'].filter(Boolean),
+  staffRoleIds: [process.env.STAFF_ROLE_ID, '1499382533803085975'].filter(Boolean),
   logChannelId: '1492495219713773728',
 
   // works (behavior)
