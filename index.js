@@ -22,6 +22,9 @@ const {
     ButtonStyle
 } = require('discord.js');
 
+// New support ticket system (General / High Rankings / Partnerships / Report)
+const { handleTicketInteraction } = require('./ticket/handler');
+
 // Role pinged / given access on ban appeal tickets (from /appeals)
 const APPEALS_ROLE_ID = '1497464387429073037';
 
@@ -362,7 +365,10 @@ client.once(Events.ClientReady, async () => {
 client.on(
     Events.InteractionCreate,
     async interaction => {
-        
+
+        // New support ticket system (buttons + modals starting with "ticket:")
+        if (await handleTicketInteraction(interaction)) return;
+
 // =========================
 // DOCK VERIFICATION
 // =========================
