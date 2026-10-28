@@ -229,11 +229,12 @@ module.exports = {
                     )
 
                     // Separator
-                    .addSeparatorComponents(
-                        new SeparatorBuilder(
-                            .setDivider(true)
-                            .setSpacing(1)
-                    )
+// Separator
+.addSeparatorComponents(
+    new SeparatorBuilder()
+        .setDivider(true)
+        .setSpacing(1)
+)
 
                     // Evidence image
                     .addMediaGalleryComponents(
