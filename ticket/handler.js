@@ -1,3 +1,8 @@
+// ============================================================
+//  TICKET HANDLER
+//  Needs discord.js 14.26 or newer (for checkboxes in modals).
+//  You shouldn't need to edit this file, use config.js instead.
+// ============================================================
 
 const fs = require('fs');
 const path = require('path');
@@ -50,7 +55,7 @@ function saveClaims(claims) {
   }
 }
 
-// ---------- helpers ----------
+// ---------- small helpers ----------
 
 const fmt = (tpl, vars = {}) =>
   tpl.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : `{${k}}`));
@@ -107,17 +112,6 @@ function parseTopic(topic) {
     id: out['ticket-id'] ?? 'N/A',
     lookup: out['ticket-lookup'] ?? 'N/A',
   };
-}
-
-// Reads a value out of a submitted modal (works for text inputs, selects, checkboxes)
-function readField(interaction, id) {
-  const direct = interaction.fields.fields?.get(id);
-  if (direct) return direct.values ?? direct.value;
-  for (const row of interaction.components ?? []) {
-    const c = row.component ?? row.components?.[0];
-    if (c?.customId === id) return c.values ?? c.value;
-  }
-  return undefined;
 }
 
 // ---------- support panel ----------
@@ -219,7 +213,7 @@ function buildRenameModal() {
     );
 }
 
-// ---------- ticket panel ----------
+// ---------- ticket card (inside the ticket channel) ----------
 
 function buildTicketCard(t, d) {
   const btn = (id, label) =>
@@ -239,14 +233,19 @@ function buildTicketCard(t, d) {
     `TOS Agreement: ${d.tos}`,
   ].join('\n');
 
-  return newContainer()
+  const card = newContainer()
     .addMediaGalleryComponents(image(config.images.banner))
     .addSeparatorComponents(divider())
     .addTextDisplayComponents(
       text(t.ticketTitle),
       text(`> Ticket created by <@${d.openerId}>.`),
       text(details)
-    )
+    );
+
+  // Hidden pings: wrapped in a spoiler so they show as the dark bar above the buttons
+  if (d.pings) card.addTextDisplayComponents(text(`||${d.pings}||`));
+
+  return card
     .addActionRowComponents(row)
     .addSeparatorComponents(divider())
     .addMediaGalleryComponents(image(config.images.footer));
@@ -262,7 +261,7 @@ async function createTicket(interaction, typeKey) {
 
   await interaction.deferReply({ flags: EPHEMERAL });
 
-  const tosValue = first(readField(interaction, 'tos'));
+  const tosValue = first(interaction.fields.getCheckboxGroup('tos'));
   if (config.requireTos && tosValue !== 'yes') {
     return interaction.editReply({ content: config.messages.tosDeclined });
   }
@@ -278,9 +277,9 @@ async function createTicket(interaction, typeKey) {
     });
   }
 
-  const reason = (readField(interaction, 'reason') || 'N/A').toString().trim();
-  const extra = (readField(interaction, 'additional') || 'N/A').toString().trim();
-  const staffId = first(readField(interaction, 'staff'));
+  const reason = interaction.fields.getTextInputValue('reason').trim() || 'N/A';
+  const extra = interaction.fields.getTextInputValue('additional').trim() || 'N/A';
+  const staffId = first(interaction.fields.getStringSelectValues('staff'));
   const hasStaff = staffId && staffId !== 'none';
   const staffText = hasStaff ? `<@${staffId}>` : 'N/A';
 
@@ -315,14 +314,11 @@ async function createTicket(interaction, typeKey) {
     ],
   });
 
-  // Ping message, then the ticket card
-  await channel.send({
-    content: fmt(config.messages.welcomePing, {
-      user: `<@${user.id}>`,
-      staff: hasStaff ? `<@${staffId}>` : '',
-    }).trim(),
-    allowedMentions: { users: hasStaff ? [user.id, staffId] : [user.id] },
-  });
+  // Who gets pinged (hidden in a spoiler on the card): this ticket type's staff roles
+  // + the staff member picked in the form
+  const pingRoles = staffRolesFor(typeKey);
+  const pingUsers = hasStaff ? [staffId] : [];
+  const pings = [...pingRoles.map((id) => `<@&${id}>`), ...pingUsers.map((id) => `<@${id}>`)].join(' ');
 
   await channel.send({
     components: [
@@ -332,10 +328,11 @@ async function createTicket(interaction, typeKey) {
         extra,
         staffText,
         tos: tosValue === 'yes' ? 'Yes' : 'No',
+        pings,
       }),
     ],
     flags: V2,
-    allowedMentions: NO_PINGS,
+    allowedMentions: { parse: [], roles: pingRoles, users: pingUsers },
   });
 
   return interaction.editReply({
@@ -444,7 +441,7 @@ async function renameTicket(interaction) {
   if (!info || !isStaff(interaction.member, info.type)) {
     return interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
   }
-  const raw = readField(interaction, 'name').toString().trim();
+  const raw = interaction.fields.getTextInputValue('name').trim();
   const name = raw.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '').slice(0, 90);
   if (!name) {
     return interaction.reply({
@@ -458,6 +455,7 @@ async function renameTicket(interaction) {
 }
 
 // ---------- router ----------
+// Returns true if the interaction was a ticket one (so your other code can skip it).
 
 async function handleTicketInteraction(interaction) {
   const id = interaction.customId;
@@ -492,6 +490,7 @@ async function handleTicketInteraction(interaction) {
       if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
       else await interaction.reply(payload);
     } catch {
+      // interaction already expired, nothing else to do
     }
   }
 

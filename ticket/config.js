@@ -1,500 +1,132 @@
-// ============================================================
-//  TICKET HANDLER
-//  Needs discord.js 14.26 or newer (for checkboxes in modals).
-//  You shouldn't need to edit this file, use config.js instead.
-// ============================================================
-
-const fs = require('fs');
-const path = require('path');
-
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  CheckboxGroupBuilder,
-  ContainerBuilder,
-  LabelBuilder,
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
-  MessageFlags,
-  ModalBuilder,
-  PermissionFlagsBits,
-  SeparatorBuilder,
-  StringSelectMenuBuilder,
-  TextDisplayBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-} = require('discord.js');
-
-const config = require('./config');
-
-const V2 = MessageFlags.IsComponentsV2;
-const EPHEMERAL = MessageFlags.Ephemeral;
-const GAP = '\u2003\u2003'; // wide space used between the two columns in the close log
-const NO_PINGS = { parse: [] };
-
-// Claims are saved in data/claims.json (same file/format your old ticket system used),
-// so they survive restarts and never touch the channel name/topic rate limit.
-const claimsFile = path.join(__dirname, '..', 'data', 'claims.json');
-
-function loadClaims() {
-  try {
-    return JSON.parse(fs.readFileSync(claimsFile, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function saveClaims(claims) {
-  try {
-    fs.mkdirSync(path.dirname(claimsFile), { recursive: true });
-    fs.writeFileSync(claimsFile, JSON.stringify(claims, null, 4));
-  } catch (err) {
-    console.error('tickets: could not write claims.json:', err);
-  }
-}
-
-// ---------- small helpers ----------
-
-const fmt = (tpl, vars = {}) =>
-  tpl.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : `{${k}}`));
-
-const text = (content) => new TextDisplayBuilder().setContent(content);
-const divider = () => new SeparatorBuilder().setDivider(true).setSpacing(1);
-const image = (url) =>
-  new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(url));
-
-function newContainer() {
-  const c = new ContainerBuilder();
-  if (config.accentColor !== null && config.accentColor !== undefined) {
-    c.setAccentColor(config.accentColor);
-  }
-  return c;
-}
-
-const rand = (n) => String(Math.floor(Math.random() * 10 ** n)).padStart(n, '0');
-const letters = (n) =>
-  Array.from({ length: n }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
-
-const first = (v) => (Array.isArray(v) ? v[0] : v);
-
-// Roles that can see a ticket of this type (per-type override, else the global list)
-function staffRolesFor(typeKey) {
-  return (config.types[typeKey]?.staffRoleIds || config.staffRoleIds).filter(Boolean);
-}
-
-// Can use Claim / Unclaim / Close / Rename: global staff, this type's roles, or admins
-function isStaff(member, typeKey) {
-  const roles = [...config.staffRoleIds, ...staffRolesFor(typeKey)].filter(Boolean);
-  return (
-    roles.some((id) => member.roles.cache.has(id)) ||
-    member.permissions.has(PermissionFlagsBits.Administrator)
-  );
-}
-
-// Ticket info is stored in the channel topic, in the same style as your old tickets:
-// ticket-owner:123;ticket-type:general;ticket-id:83349;ticket-lookup:GEN301AI
-function buildTopic(d) {
-  return `ticket-owner:${d.opener};ticket-type:${d.type};ticket-id:${d.id};ticket-lookup:${d.lookup}`;
-}
-
-function parseTopic(topic) {
-  if (!topic || !topic.includes('ticket-owner:')) return null;
-  const out = {};
-  for (const part of topic.split(';')) {
-    const i = part.indexOf(':');
-    if (i > 0) out[part.slice(0, i)] = part.slice(i + 1);
-  }
-  return {
-    opener: out['ticket-owner'],
-    type: out['ticket-type'],
-    id: out['ticket-id'] ?? 'N/A',
-    lookup: out['ticket-lookup'] ?? 'N/A',
-  };
-}
-
-// ---------- support panel ----------
-
-function buildPanel() {
-  const row = new ActionRowBuilder().addComponents(
-    Object.entries(config.types).map(([key, t]) =>
-      new ButtonBuilder()
-        .setCustomId(`ticket:open:${key}`)
-        .setLabel(t.label)
-        .setStyle(ButtonStyle.Secondary)
-    )
-  );
-
-  return newContainer()
-    .addMediaGalleryComponents(image(config.images.banner))
-    .addSeparatorComponents(divider())
-    .addTextDisplayComponents(text(config.panel.title), text(config.panel.description))
-    .addActionRowComponents(row)
-    .addSeparatorComponents(divider())
-    .addMediaGalleryComponents(image(config.images.footer));
-}
-
-// ---------- modals ----------
-
-function buildTicketModal(typeKey) {
-  const t = config.types[typeKey];
-  const m = config.modal;
-
-  const reason = new LabelBuilder()
-    .setLabel(m.reasonLabel)
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId('reason')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(100)
-    );
-
-  const extra = new LabelBuilder()
-    .setLabel(m.additionalLabel)
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId('additional')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(1000)
-    );
-
-  const staff = new LabelBuilder()
-    .setLabel(m.staffLabel)
-    .setDescription(m.staffDescription)
-    .setStringSelectMenuComponent(
-      new StringSelectMenuBuilder()
-        .setCustomId('staff')
-        .addOptions(
-          config.staffOptions.slice(0, 25).map((o, i) => ({
-            label: o.label,
-            value: o.value,
-            default: i === 0,
-          }))
-        )
-    );
-
-  const tos = new LabelBuilder()
-    .setLabel(m.tosLabel)
-    .setCheckboxGroupComponent(
-      new CheckboxGroupBuilder()
-        .setCustomId('tos')
-        .setRequired(true)
-        .setMinValues(1)
-        .setMaxValues(1)
-        .setOptions([
-          { label: 'Yes', value: 'yes' },
-          { label: 'No', value: 'no' },
-        ])
-    );
-
-  return new ModalBuilder()
-    .setCustomId(`ticket:submit:${typeKey}`)
-    .setTitle(t.label)
-    .addLabelComponents(reason, extra, staff, tos);
-}
-
-function buildRenameModal() {
-  return new ModalBuilder()
-    .setCustomId('ticket:renamesubmit')
-    .setTitle(config.modal.renameTitle)
-    .addLabelComponents(
-      new LabelBuilder()
-        .setLabel(config.modal.renameLabel)
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId('name')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(90)
-        )
-    );
-}
-
-// ---------- ticket card (inside the ticket channel) ----------
-
-function buildTicketCard(t, d) {
-  const btn = (id, label) =>
-    new ButtonBuilder().setCustomId(`ticket:${id}`).setLabel(label).setStyle(ButtonStyle.Secondary);
-
-  const row = new ActionRowBuilder().addComponents(
-    btn('claim', 'Claim'),
-    btn('unclaim', 'Unclaim'),
-    btn('close', 'Close'),
-    btn('rename', 'Rename')
-  );
-
-  const details = [
-    `${config.modal.reasonLabel}: ${d.reason}`,
-    `${config.modal.additionalLabel}: ${d.extra}`,
-    `Specific Staff Member: ${d.staffText}`,
-    `TOS Agreement: ${d.tos}`,
-  ].join('\n');
-
-  const card = newContainer()
-    .addMediaGalleryComponents(image(config.images.banner))
-    .addSeparatorComponents(divider())
-    .addTextDisplayComponents(
-      text(t.ticketTitle),
-      text(`> Ticket created by <@${d.openerId}>.`),
-      text(details)
-    );
-
-  // Hidden pings: wrapped in a spoiler so they show as the dark bar above the buttons
-  if (d.pings) card.addTextDisplayComponents(text(`||${d.pings}||`));
-
-  return card
-    .addActionRowComponents(row)
-    .addSeparatorComponents(divider())
-    .addMediaGalleryComponents(image(config.images.footer));
-}
-
-// ---------- actions ----------
-
-const ticketInfo = (interaction) => parseTopic(interaction.channel?.topic);
-
-async function createTicket(interaction, typeKey) {
-  const t = config.types[typeKey];
-  if (!t) return;
-
-  await interaction.deferReply({ flags: EPHEMERAL });
-
-  const tosValue = first(interaction.fields.getCheckboxGroup('tos'));
-  if (config.requireTos && tosValue !== 'yes') {
-    return interaction.editReply({ content: config.messages.tosDeclined });
-  }
-
-  const guild = interaction.guild;
-  const user = interaction.user;
-
-  // Limit open tickets per person (also counts tickets from the dashboard/appeals menus)
-  const open = guild.channels.cache.filter((c) => parseTopic(c.topic)?.opener === user.id);
-  if (open.size >= config.maxOpenPerUser) {
-    return interaction.editReply({
-      content: fmt(config.messages.alreadyOpen, { channel: `<#${open.first().id}>` }),
-    });
-  }
-
-  const reason = interaction.fields.getTextInputValue('reason').trim() || 'N/A';
-  const extra = interaction.fields.getTextInputValue('additional').trim() || 'N/A';
-  const staffId = first(interaction.fields.getStringSelectValues('staff'));
-  const hasStaff = staffId && staffId !== 'none';
-  const staffText = hasStaff ? `<@${staffId}>` : 'N/A';
-
-  const ticketId = rand(5);
-  const lookup = `${t.lookupPrefix}${rand(3)}${letters(2)}`;
-
-  const botId = interaction.client.user.id;
-  const memberPerms = [
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.ReadMessageHistory,
-    PermissionFlagsBits.AttachFiles,
-    PermissionFlagsBits.EmbedLinks,
-  ];
-
-  const channel = await guild.channels.create({
-    name: `${t.channelPrefix}-${user.username}`.toLowerCase().replace(/[^a-z0-9-_]/g, '').slice(0, 90) || 'ticket',
-    type: ChannelType.GuildText,
-    parent: t.categoryId || null,
-    topic: buildTopic({ id: ticketId, lookup, type: typeKey, opener: user.id }),
-    permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: user.id, allow: memberPerms },
-      ...staffRolesFor(typeKey).map((id) => ({
-        id,
-        allow: [...memberPerms, PermissionFlagsBits.ManageMessages],
-      })),
-      {
-        id: botId,
-        allow: [...memberPerms, PermissionFlagsBits.ManageChannels],
-      },
-    ],
-  });
-
-  // Who gets pinged (hidden in a spoiler on the card): this ticket type's staff roles
-  // + the staff member picked in the form
-  const pingRoles = staffRolesFor(typeKey);
-  const pingUsers = hasStaff ? [staffId] : [];
-  const pings = [...pingRoles.map((id) => `<@&${id}>`), ...pingUsers.map((id) => `<@${id}>`)].join(' ');
-
-  await channel.send({
-    components: [
-      buildTicketCard(t, {
-        openerId: user.id,
-        reason,
-        extra,
-        staffText,
-        tos: tosValue === 'yes' ? 'Yes' : 'No',
-        pings,
-      }),
-    ],
-    flags: V2,
-    allowedMentions: { parse: [], roles: pingRoles, users: pingUsers },
-  });
-
-  return interaction.editReply({
-    content: fmt(config.messages.ticketCreated, { channel: `<#${channel.id}>` }),
-  });
-}
-
-async function claimTicket(interaction) {
-  const info = ticketInfo(interaction);
-  if (!info || !isStaff(interaction.member, info.type)) {
-    return interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
-  }
-
-  const claims = loadClaims();
-  const current = claims[interaction.channelId]?.claimedBy;
-  if (current) {
-    return interaction.reply({
-      content: fmt(config.messages.alreadyClaimed, { user: `<@${current}>` }),
-      flags: EPHEMERAL,
-      allowedMentions: NO_PINGS,
-    });
-  }
-
-  claims[interaction.channelId] = { claimedBy: interaction.user.id };
-  saveClaims(claims);
-
-  return interaction.reply({
-    content: fmt(config.messages.claimed, { user: `<@${interaction.user.id}>` }),
-    allowedMentions: NO_PINGS,
-  });
-}
-
-async function unclaimTicket(interaction) {
-  const info = ticketInfo(interaction);
-  if (!info || !isStaff(interaction.member, info.type)) {
-    return interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
-  }
-
-  const claims = loadClaims();
-  const current = claims[interaction.channelId]?.claimedBy;
-  if (!current) {
-    return interaction.reply({ content: config.messages.notClaimed, flags: EPHEMERAL });
-  }
-  if (
-    current !== interaction.user.id &&
-    !interaction.member.permissions.has(PermissionFlagsBits.Administrator)
-  ) {
-    return interaction.reply({ content: config.messages.notYourClaim, flags: EPHEMERAL });
-  }
-
-  delete claims[interaction.channelId];
-  saveClaims(claims);
-
-  return interaction.reply({
-    content: fmt(config.messages.unclaimed, { user: `<@${interaction.user.id}>` }),
-    allowedMentions: NO_PINGS,
-  });
-}
-
-async function closeTicket(interaction) {
-  const channel = interaction.channel;
-  const info = ticketInfo(interaction);
-  if (!info || !isStaff(interaction.member, info.type)) {
-    return interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
-  }
-
-  await interaction.reply({
-    content: fmt(config.messages.closing, { seconds: config.closeDelaySeconds }),
-  });
-
-  const typeName = config.types[info.type]?.typeName ?? info.type;
-
-  const log = newContainer()
-    .addTextDisplayComponents(
-      text(config.log.title),
-      text(`Ticket ID: ${info.id}${GAP}Opener: <@${info.opener}>`),
-      text(`Ticket Type: ${typeName}${GAP}Lookup ID: ${info.lookup}`),
-      text(`Closed By: <@${interaction.user.id}>${GAP}Database: ${config.log.database}`),
-      text(`Version: ${config.log.version}${GAP}${config.log.madeFor}`)
-    )
-    .addSeparatorComponents(divider())
-    .addMediaGalleryComponents(image(config.images.footer));
-
-  try {
-    const logChannel = await interaction.client.channels.fetch(config.logChannelId);
-    await logChannel.send({ components: [log], flags: V2, allowedMentions: NO_PINGS });
-  } catch (err) {
-    console.error('tickets: could not send close log (check logChannelId in ticket/config.js):', err.message);
-  }
-
-  const claims = loadClaims();
-  if (claims[channel.id]) {
-    delete claims[channel.id];
-    saveClaims(claims);
-  }
-
-  setTimeout(() => {
-    channel
-      .delete(`Ticket closed by ${interaction.user.tag}`)
-      .catch((err) => console.error('tickets: could not delete channel:', err));
-  }, config.closeDelaySeconds * 1000);
-}
-
-async function renameTicket(interaction) {
-  const info = ticketInfo(interaction);
-  if (!info || !isStaff(interaction.member, info.type)) {
-    return interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
-  }
-  const raw = interaction.fields.getTextInputValue('name').trim();
-  const name = raw.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '').slice(0, 90);
-  if (!name) {
-    return interaction.reply({
-      content: 'That name isn\u2019t valid. Use letters, numbers, hyphens or underscores.',
-      flags: EPHEMERAL,
-    });
-  }
-  await interaction.deferReply({ flags: EPHEMERAL });
-  await interaction.channel.setName(name);
-  return interaction.editReply({ content: fmt(config.messages.renamed, { name }) });
-}
-
-// ---------- router ----------
-// Returns true if the interaction was a ticket one (so your other code can skip it).
-
-async function handleTicketInteraction(interaction) {
-  const id = interaction.customId;
-  if (!id || !id.startsWith('ticket:')) return false;
-
-  const [, action, arg] = id.split(':');
-
-  try {
-    if (interaction.isButton()) {
-      if (action === 'open') {
-        if (!config.types[arg]) return true;
-        await interaction.showModal(buildTicketModal(arg));
-      } else if (action === 'claim') await claimTicket(interaction);
-      else if (action === 'unclaim') await unclaimTicket(interaction);
-      else if (action === 'close') await closeTicket(interaction);
-      else if (action === 'rename') {
-        const info = ticketInfo(interaction);
-        if (!info || !isStaff(interaction.member, info.type)) {
-          await interaction.reply({ content: config.messages.staffOnly, flags: EPHEMERAL });
-        } else {
-          await interaction.showModal(buildRenameModal());
-        }
-      }
-    } else if (interaction.isModalSubmit()) {
-      if (action === 'submit') await createTicket(interaction, arg);
-      else if (action === 'renamesubmit') await renameTicket(interaction);
-    }
-  } catch (err) {
-    console.error('tickets: error handling interaction:', err);
-    const payload = { content: config.messages.error, flags: EPHEMERAL };
-    try {
-      if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
-      else await interaction.reply(payload);
-    } catch {
-      // interaction already expired, nothing else to do
-    }
-  }
-
-  return true;
-}
-
-module.exports = { buildPanel, buildTicketModal, handleTicketInteraction };
+module.exports = {
+  // images
+  images: {
+    banner: 'PASTE_BANNER_IMAGE_URL_HERE', // the big "SUPPORT" image at the top
+    // Pre-filled with the footer your other panels use. Swap it if the old ticket bar was different.
+    footer: 'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png',
+  },
+
+  // Accent colour bar on the left of the cards. null = none (like your old tickets).
+  // Use e.g. 0x5865F2 to match your other panels.
+  accentColor: null,
+
+  // Channel the /supportpanel command posts the panel in. '' = the channel you run it in.
+  panelChannelId: '1563481620978335744',
+
+  // ids
+  staffRoleIds: [process.env.STAFF_ROLE_ID, '1495734364347043880'].filter(Boolean),
+  logChannelId: '1492495219713773728',
+
+  // works (behavior)
+  maxOpenPerUser: 1, // how many tickets one person can have open at once
+  closeDelaySeconds: 5, // wait before the channel is deleted after pressing Close
+  requireTos: true, // if true, picking "No" on the TOS question blocks the ticket
+
+  // open panel
+  panel: {
+    title: '## Support',
+    description: '> Need support? Open a ticket for our staff to assist.',
+  },
+
+  // ticket types
+  //   label         = text on the panel button + modal title
+  //   ticketTitle   = heading inside the ticket channel
+  //   typeName      = shown in the close log ("Ticket Type: ...")
+  //   lookupPrefix  = start of the Lookup ID (GEN301AI)
+  //   categoryId    = category the ticket channel is created in
+//   staffRoleIds  = roles that can see this ticket type (replaces the global list for visibility)
+  //   channelPrefix = ticket channel name becomes prefix-username
+  types: {
+    general: {
+      label: 'General',
+      ticketTitle: '## General Ticket',
+      typeName: 'General',
+      lookupPrefix: 'GEN',
+      categoryId: '1497142936461246464',
+      staffRoleIds: [process.env.STAFF_ROLE_ID].filter(Boolean), // who sees this ticket type
+      channelPrefix: 'general',
+    },
+    highrankings: {
+      label: 'High Rankings',
+      ticketTitle: '## High Ranking Ticket',
+      typeName: 'High Ranking',
+      lookupPrefix: 'HIG',
+      categoryId: '1497142936461246464',
+      staffRoleIds: ['1468059306992730215'], // who sees this ticket type
+      channelPrefix: 'highrank',
+    },
+    partnerships: {
+      label: 'Partnerships',
+      ticketTitle: '## Partnership Ticket',
+      typeName: 'Partnership',
+      lookupPrefix: 'PAR',
+      categoryId: '1497142936461246464',
+      staffRoleIds: [process.env.STAFF_ROLE_ID].filter(Boolean), // who sees this ticket type
+      channelPrefix: 'partner',
+    },
+    report: {
+      label: 'Report',
+      ticketTitle: '## Report Ticket',
+      typeName: 'Report',
+      lookupPrefix: 'REP',
+      categoryId: '1497142936461246464',
+      staffRoleIds: ['1499382533803085975'], // who sees this ticket type
+      channelPrefix: 'report',
+    },
+  },
+
+  // ---------- Staff dropdown in the modal ----------
+  // First entry must stay as N/A. Add staff as { label: 'Name', value: 'THEIR_USER_ID' }
+  // (Discord allows max 25 entries.)
+  staffOptions: [
+    { label: 'N/A', value: 'none' },
+    { label: 'T0m2444 (Director)', value: '1337622266493534279' },
+    { label: 'Corh (Co Director)', value: '917383981039771670' },
+    { label: 'Habibi (Community Manager)', value: '1484740687781036123' },
+    { label: 'StolenValkyrie (Community Management)', value: '1347447934597464089' },
+    { label: 'itx_clux (Community Management)', value: '1465888974387155184' },
+    { label: 'Hitheresam (Community Coordinator)', value: '1293866310391959563' },
+    { label: 'Luke1006x (Administrator)', value: '1362935644464222213' },
+    { label: 'Leothecooldude (Moderator)', value: '1432620505705484451' },
+    { label: 'Metropolice828 (moderator)', value: '1503981224534868090' },
+    { label: 'Secret_Agent (Moderator)', value: '1425119597354553354' },
+  ],
+
+  // modal
+  modal: {
+    reasonLabel: 'Reason For Opening',
+    additionalLabel: 'Additional Information',
+    staffLabel: 'Do you need a specific staff member?',
+    staffDescription: 'If so select the person.',
+    tosLabel: 'Are you willing to follow Ticket TOS?',
+    renameTitle: 'Rename Ticket',
+    renameLabel: 'New channel name',
+  },
+
+  // mesgs
+  // {user} {staff} {seconds} get replaced automatically
+  messages: {
+    // Plain message sent in the ticket channel just before the ticket card (pings people)
+    welcomePing: '{user} {staff}',
+    ticketCreated: 'Your ticket has been created: {channel}',
+    alreadyOpen: 'You already have the maximum number of open tickets: {channel}',
+    tosDeclined: 'You must agree to follow the Ticket TOS to open a ticket.',
+    staffOnly: 'Only staff can use this button.',
+    claimed: '{user} has claimed this ticket.',
+    alreadyClaimed: 'This ticket is already claimed by {user}.',
+    notClaimed: 'This ticket is not claimed.',
+    notYourClaim: 'Only the staff member who claimed this ticket can unclaim it.',
+    unclaimed: '{user} has unclaimed this ticket.',
+    closing: 'This ticket will be closed in {seconds} seconds...',
+    renamed: 'Ticket renamed to {name}.',
+    error: 'Something went wrong. Please report this to a staff member or directly contact <@1347447934597464089>.',
+  },
+
+  // closing log or smth
+  log: {
+    title: '## Ticket Closed',
+    database: 'Unavailable', // shown as "Database: ..."
+    version: '1.0',
+    madeFor: 'Made for Australia Interactive (AI1X25)',
+  },
+};
