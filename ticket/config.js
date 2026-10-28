@@ -15,7 +15,7 @@ module.exports = {
 
   // ids
   staffRoleIds: [process.env.STAFF_ROLE_ID, '1499382533803085975'].filter(Boolean),
-  logChannelId: 'LOG_CHANNEL_ID_HERE',
+  logChannelId: '1492495219713773728',
 
   // works (behavior)
   maxOpenPerUser: 1, // how many tickets one person can have open at once
