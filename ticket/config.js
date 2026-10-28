@@ -3,7 +3,7 @@ module.exports = {
   images: {
     banner: 'https://cdn.phototourl.com/member/2026-10-28-5ab2bd9c-b474-4b46-b689-c830cf464af3.png',
 
-    footer: 'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png',
+    footer: 'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png',
   },
 
   accentColor: null,
