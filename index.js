@@ -220,6 +220,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 return;
             }
 
+
             // MEMBER COUNT BUTTON
             if (interaction.customId === 'memberbutton') {
                 const guild = interaction.guild;
@@ -232,33 +233,112 @@ client.on(Events.InteractionCreate, async interaction => {
                     return;
                 }
 
-                const memberContainer = new ContainerBuilder()
-                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
-                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'),
-                    ))
-                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
-                    .addTextDisplayComponents(new TextDisplayBuilder().setContent([
-                        '# Server Member Count',
-                        '',
-                        '## 👥 Total Members',
-                        `**${guild.memberCount.toLocaleString()}**`,
-                        '',
-                        '*Human and bot breakdown is not available in this cached-count version.*',
-                    ].join('\n')))
-                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
-                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`*Count requested by ${interaction.user.username}*`))
-                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
-                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
-                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'),
-                    ));
-
-                await interaction.reply({
-                    components: [memberContainer],
-                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+                // Defer the reply in case Discord needs time to fetch members.
+                await interaction.deferReply({
+                    flags: MessageFlags.Ephemeral,
                 });
+
+                try {
+                    // Fetch all guild members so the human/bot counts are accurate.
+                    await guild.members.fetch();
+
+                    const members = guild.members.cache;
+                    const totalMembers = guild.memberCount;
+
+                    const botCount = members.filter(
+                        member => member.user.bot
+                    ).size;
+
+                    const humanCount = members.filter(
+                        member => !member.user.bot
+                    ).size;
+
+                    // Fetch the latest server data, including boost count.
+                    const freshGuild = await guild.fetch();
+
+                    const boostCount = freshGuild.premiumSubscriptionCount ?? 0;
+                    const boostLevel = freshGuild.premiumTier;
+
+                    const vanityURL = 'https://discord.gg/ausi';
+
+                    const memberContainer = new ContainerBuilder()
+                        .addMediaGalleryComponents(
+                            new MediaGalleryBuilder().addItems(
+                                new MediaGalleryItemBuilder().setURL(
+                                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                                ),
+                            ),
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1),
+                        )
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent([
+                                '# 📊 Server Statistics',
+                                '',
+                                '## 👥 Total Members',
+                                `**${totalMembers.toLocaleString()}**`,
+                                '',
+                                '## 👤 Human Members',
+                                `**${humanCount.toLocaleString()}**`,
+                                '',
+                                '## 🤖 Bots',
+                                `**${botCount.toLocaleString()}**`,
+                                '',
+                                '## 🚀 Server Boosts',
+                                `**${boostCount.toLocaleString()}**`,
+                                `**Boost Level:** ${boostLevel}`,
+                                '',
+                                '## 🔗 Server Invite',
+                                `[discord.gg/ausi](${vanityURL})`,
+                            ].join('\n')),
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1),
+                        )
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(
+                                `*Requested by ${interaction.user.username}*`,
+                            ),
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1),
+                        )
+                        .addMediaGalleryComponents(
+                            new MediaGalleryBuilder().addItems(
+                                new MediaGalleryItemBuilder().setURL(
+                                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                                ),
+                            ),
+                        );
+
+                    await interaction.editReply({
+                        components: [memberContainer],
+                        flags: MessageFlags.IsComponentsV2
+                            | MessageFlags.Ephemeral,
+                    });
+                } catch (error) {
+                    console.error(
+                        'Error fetching server statistics:',
+                        error,
+                    );
+
+                    await interaction.editReply({
+                        content:
+                            '❌ Could not load server statistics. Please try again later.',
+                        components: [],
+                    }).catch(() => {});
+                }
 
                 return;
             }
+
 
             // DOCK VERIFICATION BUTTON
             if (interaction.customId === 'dock_verify') {
