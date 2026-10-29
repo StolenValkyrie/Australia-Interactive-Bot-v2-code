@@ -129,7 +129,7 @@ module.exports = {
   log: {
     title: '## Ticket Closed',
     database: 'Unavailable', // shown as "Database: ..."
-    version: '1.0',
+    version: '1.1.0',
     madeFor: 'Made for Australia Interactive (AI1X25)',
   },
 };

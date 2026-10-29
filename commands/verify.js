@@ -28,7 +28,7 @@ module.exports = {
 
         if (
             !interaction.member?.roles?.cache?.has(staffRoleId) &&
-            !interaction.member?.permissions?.has('Administrator')
+            !interaction.member?.permissions?.has('ManageChannels')
         ) {
 
             await interaction.reply({

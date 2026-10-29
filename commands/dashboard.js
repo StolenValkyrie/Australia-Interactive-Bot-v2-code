@@ -1,7 +1,3 @@
-// dashboard.js
-// Slash command: /dashboard
-// Posts the server dashboard panel to a fixed channel instead of replying
-// in the channel the command was used in.
 
 const {
     SlashCommandBuilder,
@@ -11,104 +7,56 @@ const {
     MediaGalleryBuilder,
     MediaGalleryItemBuilder,
     ActionRowBuilder,
-    StringSelectMenuBuilder,
-    StringSelectMenuOptionBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     MessageFlags,
     PermissionFlagsBits,
 } = require('discord.js');
 
-// Channel the dashboard panel gets posted to, regardless of where the
-// command is run from.
+// Dashboard channel
 const DASHBOARD_CHANNEL_ID = '1396105436662464563';
 
+// Build your dashboard here
 function buildDashboardContainer(guild) {
     return new ContainerBuilder()
-        .setAccentColor(0x5865F2)
-
-        // Banner
         .addMediaGalleryComponents(
-            new MediaGalleryBuilder()
-                .addItems(
-                    new MediaGalleryItemBuilder()
-                        .setURL(
-                            'https://cdn.phototourl.com/free/2026-08-12-0e5ced57-9357-4d18-8541-a20e86064f98.webp'
-                        )
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(
+                    'xxx'
                 )
-        )
-
-        .addSeparatorComponents(
-            new SeparatorBuilder().setDivider(true).setSpacing(1)
-        )
-
-        // Title
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('# Server Dashboard')
-        )
-
-        // Description
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `Welcome to the dashboard for **${guild.name}**. Use the menu below to open a ticket or view server guidelines.`
             )
         )
-
         .addSeparatorComponents(
-            new SeparatorBuilder().setDivider(true).setSpacing(1)
+            new SeparatorBuilder()
+                .setDivider(true)
+                .setSpacing(1)
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('# Dashboard'),
+            new TextDisplayBuilder().setContent('> Welcome to the Australia Interactive Dashboard. Rules are placed here.')
         )
 
-        // Ticket selection menu
         .addActionRowComponents(
             new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('ticket_select')
-                    .setPlaceholder('Select a dashboard option')
-                    .addOptions(
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel('Support')
-                            .setDescription('Get help from the support team')
-                            .setValue('support')
-                            .setEmoji('🛠️'),
-
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel('Report')
-                            .setDescription('Report a player or issue')
-                            .setValue('report')
-                            .setEmoji('🚨'),
-
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel('Partnerships')
-                            .setDescription('Discuss a partnership or collaboration')
-                            .setValue('partnerships')
-                            .setEmoji('🤝'),
-
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel('Other')
-                            .setDescription('Create another type of ticket')
-                            .setValue('other')
-                            .setEmoji('📩'),
-
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel('Guidelines')
-                            .setDescription('The guidelines for the guild!')
-                            .setValue('guidelines')
-                            .setEmoji('📖')
-                    )
+                new ButtonBuilder()
+                    .setCustomId('rules')
+                    .setLabel('Rules')
+                    .setStyle(ButtonStyle.Secondary)
             )
         )
 
         .addSeparatorComponents(
-            new SeparatorBuilder().setDivider(true).setSpacing(1)
+            new SeparatorBuilder()
+                .setDivider(true)
+                .setSpacing(1)
         )
 
-        // Footer
         .addMediaGalleryComponents(
-            new MediaGalleryBuilder()
-                .addItems(
-                    new MediaGalleryItemBuilder()
-                        .setURL(
-                            'https://cdn.phototourl.com/free/2026-08-29-8be225ce-4ec4-4806-9441-8328a38846bc.png'
-                        )
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(
+                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
                 )
+            )
         );
 }
 
@@ -119,34 +67,37 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
     async execute(interaction) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        await interaction.deferReply({
+            flags: MessageFlags.Ephemeral,
+        });
 
         const channel = await interaction.client.channels
             .fetch(DASHBOARD_CHANNEL_ID)
             .catch(() => null);
 
-        if (!channel) {
+        if (!channel || !channel.isTextBased()) {
             return interaction.editReply({
-                content: `❌ Could not find the dashboard channel (\`${DASHBOARD_CHANNEL_ID}\`). Check the ID and my access to it.`,
+                content: '❌ Could not find a usable dashboard channel. Check the channel ID and bot permissions.',
             });
         }
 
-        const container = buildDashboardContainer(interaction.guild);
-
         try {
+            const container = buildDashboardContainer(interaction.guild);
+
             await channel.send({
                 components: [container],
                 flags: MessageFlags.IsComponentsV2,
             });
+
+            return interaction.editReply({
+                content: `✅ Dashboard posted to <#${DASHBOARD_CHANNEL_ID}>.`,
+            });
         } catch (err) {
             console.error('dashboard: failed to post panel:', err);
+
             return interaction.editReply({
-                content: '❌ Something went wrong posting the dashboard. Check my permissions in that channel.',
+                content: '❌ Failed to post the dashboard. Check the bot permissions and component configuration.',
             });
         }
-
-        return interaction.editReply({
-            content: `✅ Dashboard posted to <#${DASHBOARD_CHANNEL_ID}>.`,
-        });
     },
 };
