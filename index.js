@@ -2,27 +2,12 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const {
-    Client,
-    GatewayIntentBits,
-    Partials,
-    Collection,
-    Events,
-    ActivityType,
-    PresenceUpdateStatus,
-    REST,
-    Routes,
-    MessageFlags,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ContainerBuilder,
-    TextDisplayBuilder,
-    SeparatorBuilder,
-    MediaGalleryBuilder,
-    MediaGalleryItemBuilder,
+    Client, GatewayIntentBits, Partials, Collection, Events, ActivityType,
+    PresenceUpdateStatus, REST, Routes, MessageFlags, ActionRowBuilder,
+    ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder,
+    SeparatorBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder,
 } = require('discord.js');
 
-// Support ticket system (General / High Rankings / Partnerships / Report)
 const { handleTicketInteraction, claimByMessage, unclaimByMessage, logTicketClosed } = require('./ticket/handler');
 
 const client = new Client({
@@ -31,53 +16,31 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
     ],
-    partials: [
-        Partials.Channel,
-        Partials.Message,
-        Partials.User,
-        Partials.GuildMember
-    ]
+    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember],
 });
 
 require('./logger.js')(client);
 client.commands = new Collection();
 
-// =========================
-// SHARED HELPERS
-// =========================
-
-// Discord channel names: lowercase, alphanumeric + hyphen/underscore only.
 function sanitizeName(str, fallback = 'ticket') {
-    return (
-        (str || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9-_]/g, '')
-            .slice(0, 90) || fallback
-    );
+    return (str || '').toLowerCase().replace(/[^a-z0-9-_]/g, '').slice(0, 90) || fallback;
 }
 
 function isStaffMember(member) {
-    return (
+    return Boolean(
         member?.roles?.cache?.has(process.env.STAFF_ROLE_ID) ||
-        member?.roles?.cache?.has('1499382533803085975') ||
-        false
+        member?.roles?.cache?.has('1499382533803085975')
     );
 }
-
-// =========================
-// TICKET CLAIM STORE
-// =========================
-// Same file the ticket system (ticket/handler.js) uses. Needed here so
-// -close can clear a ticket's claim when it deletes the channel.
 
 const claimsFile = path.join(__dirname, 'data', 'claims.json');
 
 function loadClaims() {
     try {
         return JSON.parse(fs.readFileSync(claimsFile, 'utf8'));
-    } catch (error) {
+    } catch {
         return {};
     }
 }
@@ -91,418 +54,223 @@ function saveClaims(claims) {
     }
 }
 
-// =========================
-// TICKET CLOSE COMMAND (-close)
-// =========================
-// Usage: -close <reason>   (reason is optional, N/A if left out)
-// Staff-only, ticket channels only.
+// -close: staff-only ticket close command.
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild || !message.content.startsWith('-close')) return;
+    if (!(message.channel.topic || '').includes('ticket-owner:')) return;
 
-client.on(
-    Events.MessageCreate,
-    async message => {
-
-        if (message.author.bot) return;
-        if (!message.guild) return;
-        if (!message.content.startsWith('-close')) return;
-
-        // =========================
-        // CHECK TICKET CHANNEL
-        // =========================
-
-        const topic = message.channel.topic || '';
-
-        if (!topic.includes('ticket-owner:')) {
-            return;
-        }
-
-        // =========================
-        // CHECK STAFF
-        // =========================
-
-        if (!isStaffMember(message.member)) {
-
-            await message.reply({
-                content:
-                    '❌ Only staff members can close tickets.'
-            }).catch(() => {});
-
-            return;
-        }
-
-        // =========================
-        // GET REASON
-        // =========================
-
-        const reason =
-            message.content
-                .slice('-close'.length)
-                .trim();
-
-        // Reason is optional: with no reason the log and message say N/A
-
-        // =========================
-        // CLOSING MESSAGE
-        // =========================
-
-        await message.channel.send({
-            content:
-                `🔒 **Ticket Closing**\n\n` +
-                `**Closed by:** ${message.author}\n` +
-                `**Reason:** ${reason || 'N/A'}\n\n` +
-                `This ticket will be closed shortly.`
-        }).catch(() => {});
-
-        // =========================
-        // LOG THE CLOSE
-        // =========================
-
-        await logTicketClosed(
-            message.client,
-            message.channel,
-            message.author.id,
-            reason
-        );
-
-        // =========================
-        // DELETE AFTER DELAY
-        // =========================
-
-        setTimeout(
-            async () => {
-
-                try {
-
-                    const claims = loadClaims();
-
-                    if (
-                        claims[message.channel.id]
-                    ) {
-
-                        delete claims[
-                            message.channel.id
-                        ];
-
-                        saveClaims(claims);
-                    }
-
-                    await message.channel.delete();
-
-                } catch (error) {
-
-                    console.error(
-                        'Error closing ticket with -close:',
-                        error
-                    );
-
-                }
-
-            },
-            1500
-        );
-
+    if (!isStaffMember(message.member)) {
+        await message.reply({ content: '❌ Only staff members can close tickets.' }).catch(() => {});
+        return;
     }
-);
 
+    const reason = message.content.slice('-close'.length).trim();
 
-// =========================
-// LOAD COMMANDS
-// =========================
+    await message.channel.send({
+        content: `🔒 **Ticket Closing**\n\n**Closed by:** ${message.author}\n**Reason:** ${reason || 'N/A'}\n\nThis ticket will be closed shortly.`,
+    }).catch(() => {});
 
+    try {
+        await logTicketClosed(message.client, message.channel, message.author.id, reason);
+    } catch (error) {
+        console.error('Error logging ticket close:', error);
+    }
+
+    setTimeout(async () => {
+        try {
+            const claims = loadClaims();
+
+            if (claims[message.channel.id]) {
+                delete claims[message.channel.id];
+                saveClaims(claims);
+            }
+
+            await message.channel.delete();
+        } catch (error) {
+            console.error('Error closing ticket with -close:', error);
+        }
+    }, 1500);
+});
+
+// Load slash commands.
 const commandsPath = path.join(__dirname, 'commands');
 
-const commandFiles = fs
-    .readdirSync(commandsPath)
-    .filter(file => file.endsWith('.js'));
+if (!fs.existsSync(commandsPath)) {
+    throw new Error(`Commands folder was not found: ${commandsPath}`);
+}
 
-for (const file of commandFiles) {
+for (const file of fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'))) {
+    const command = require(path.join(commandsPath, file));
 
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
-
-    if ('data' in command && 'execute' in command) {
-
-        client.commands.set(
-            command.data.name,
-            command
-        );
-
-        console.log(
-            `Loaded command: ${command.data.name}`
-        );
+    if (command.data && command.execute) {
+        client.commands.set(command.data.name, command);
+        console.log(`Loaded command: ${command.data.name}`);
     }
 }
 
-
-// =========================
-// DEPLOY COMMANDS
-// =========================
-
 async function deployCommands() {
+    const commands = [...client.commands.values()].map(command => command.data.toJSON());
 
-    const commands = [];
-
-    for (const command of client.commands.values()) {
-        commands.push(command.data.toJSON());
+    if (!process.env.BOT_TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
+        console.error('❌ Cannot deploy commands: BOT_TOKEN, CLIENT_ID, or GUILD_ID is missing.');
+        return;
     }
 
-    const rest = new REST({ version: '10' })
-        .setToken(process.env.BOT_TOKEN);
+    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 
     try {
-
-        console.log(
-            `Deploying ${commands.length} command(s)...`
-        );
+        console.log(`Deploying ${commands.length} command(s)...`);
 
         await rest.put(
-            Routes.applicationGuildCommands(
-                process.env.CLIENT_ID,
-                process.env.GUILD_ID
-            ),
-            {
-                body: commands
-            }
+            Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+            { body: commands },
         );
 
         console.log('✅ Commands deployed!');
-
     } catch (error) {
-
-        console.error(
-            '❌ Command deployment failed:'
-        );
-
-        console.error(error);
+        console.error('❌ Command deployment failed:', error);
     }
 }
 
-
-// =========================
-// BOT READY
-// =========================
-
 client.once(Events.ClientReady, async () => {
-
-    console.log(
-        `✅ Logged in as ${client.user.tag}!`
-    );
-
-    const statusType =
-        process.env.BOT_STATUS || 'online';
-
-    const activityType =
-        process.env.ACTIVITY_TYPE || 'PLAYING';
-
-    const activityName =
-        process.env.ACTIVITY_NAME || 'discord.gg/ausi';
-
+    console.log(`✅ Logged in as ${client.user.tag}!`);
 
     const activityTypeMap = {
-
         PLAYING: ActivityType.Playing,
-
         WATCHING: ActivityType.Watching,
-
         LISTENING: ActivityType.Listening,
-
         STREAMING: ActivityType.Streaming,
-
-        COMPETING: ActivityType.Competing
+        COMPETING: ActivityType.Competing,
     };
-
 
     const statusMap = {
-
         online: PresenceUpdateStatus.Online,
-
         idle: PresenceUpdateStatus.Idle,
-
         dnd: PresenceUpdateStatus.DoNotDisturb,
-
-        invisible: PresenceUpdateStatus.Invisible
+        invisible: PresenceUpdateStatus.Invisible,
     };
 
+    const statusType = (process.env.BOT_STATUS || 'online').toLowerCase();
+    const activityType = (process.env.ACTIVITY_TYPE || 'PLAYING').toUpperCase();
 
     client.user.setPresence({
-
-        status:
-            statusMap[statusType],
-
-        activities: [
-
-            {
-                name:
-                    activityName,
-
-                type:
-                    activityTypeMap[activityType]
-            }
-        ]
+        status: statusMap[statusType] || PresenceUpdateStatus.Online,
+        activities: [{
+            name: process.env.ACTIVITY_NAME || 'discord.gg/ausi',
+            type: activityTypeMap[activityType] ?? ActivityType.Playing,
+        }],
     });
 
-
-    console.log(
-        '✅ Bot status set!'
-    );
-
+    console.log('✅ Bot status set!');
     await deployCommands();
 });
 
-
-// =========================
-// INTERACTION HANDLER
-// =========================
-
-
+// All Discord interactions are handled inside this one async listener.
 client.on(Events.InteractionCreate, async interaction => {
-    // SUPPORT TICKETS
-    if (await handleTicketInteraction(interaction)) return;
+    try {
+        if (await handleTicketInteraction(interaction)) return;
 
-    // DASHBOARD BUTTONS
-    if (interaction.isButton()) {
-        try {
+        if (interaction.isButton()) {
             // RULES BUTTON
             if (interaction.customId === 'rules') {
                 const rulesContainer = new ContainerBuilder()
-                    .addMediaGalleryComponents(
-                        new MediaGalleryBuilder().addItems(
-                            new MediaGalleryItemBuilder().setURL(
-                                'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
-                            )
-                        )
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setDivider(true).setSpacing(1)
-                    )
-                    .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent([
-                            '# Rules',
-                            '',
-                            '## 1. Be Respectful',
-                            'Treat everyone with respect. Harassment and personal attacks are not allowed.',
-                            '',
-                            '## 2. No Spam',
-                            'Avoid spam, flooding, and unnecessary repeated messages.',
-                            '',
-                            '## 3. Follow Discord ToS',
-                            'Follow Discord’s Terms of Service and Community Guidelines.',
-                            '',
-                            '## 4. No Unauthorised Advertising',
-                            'Do not advertise without staff permission.',
-                            '',
-                            '## 5. Follow Staff Instructions',
-                            'Listen to moderators and follow their instructions.',
-                            '',
-                            '## 6. Keep Channels Appropriate',
-                            'Use the correct channels and follow their guidelines.',
-                            '',
-                            '## 7. No Exploiting',
-                            'Do not abuse bots, exploits, or server features.',
-                            '',
-                            '## 8. Use Common Sense',
-                            'Respect the community and help keep the server welcoming.',
-                            '',
-                            'Breaking these rules may result in moderation action, including a kick or ban depending on severity.',
-                        ].join('\n'))
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setDivider(true).setSpacing(1)
-                    )
-                    .addMediaGalleryComponents(
-                        new MediaGalleryBuilder().addItems(
-                            new MediaGalleryItemBuilder().setURL(
-                                'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
-                            )
-                        )
-                    );
+                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'),
+                    ))
+                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                        '# Rules',
+                        '',
+                        '## 1. Be Respectful',
+                        'Treat everyone with respect. Harassment and personal attacks are not allowed.',
+                        '',
+                        '## 2. No Spam',
+                        'Avoid spam, flooding, and unnecessary repeated messages.',
+                        '',
+                        '## 3. Follow Discord ToS',
+                        'Follow Discord’s Terms of Service and Community Guidelines.',
+                        '',
+                        '## 4. No Unauthorised Advertising',
+                        'Do not advertise without staff permission.',
+                        '',
+                        '## 5. Follow Staff Instructions',
+                        'Listen to moderators and follow their instructions.',
+                        '',
+                        '## 6. Keep Channels Appropriate',
+                        'Use the correct channels and follow their guidelines.',
+                        '',
+                        '## 7. No Exploiting',
+                        'Do not abuse bots, exploits, or server features.',
+                        '',
+                        '## 8. Use Common Sense',
+                        'Respect the community and help keep the server welcoming.',
+                        '',
+                        'Breaking these rules may result in moderation action, including a kick or ban depending on severity.',
+                    ].join('\n')))
+                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
+                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'),
+                    ));
 
-                return interaction.reply({
+                await interaction.reply({
                     components: [rulesContainer],
                     flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 });
+
+                return;
             }
 
             // MEMBER COUNT BUTTON
             if (interaction.customId === 'memberbutton') {
-                await interaction.deferReply({
-                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-                });
-
                 const guild = interaction.guild;
 
                 if (!guild) {
-                    return interaction.editReply({
+                    await interaction.reply({
                         content: 'This button can only be used inside a server.',
+                        flags: MessageFlags.Ephemeral,
                     });
+                    return;
                 }
 
-                const total = guild.memberCount;
-
                 const memberContainer = new ContainerBuilder()
-                    .addMediaGalleryComponents(
-                        new MediaGalleryBuilder().addItems(
-                            new MediaGalleryItemBuilder().setURL(
-                                'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
-                            )
-                        )
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setDivider(true).setSpacing(1)
-                    )
-                    .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent([
-                            '# Server Member Count',
-                            '',
-                            '## 👥 Total Members',
-                            `**${total.toLocaleString()}**`,
-                            '',
-                            '*Human and bot breakdown is not available in this cached-count version.*',
-                        ].join('\n'))
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setDivider(true).setSpacing(1)
-                    )
-                    .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(
-                            `*Count requested by ${interaction.user.username}*`
-                        )
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setDivider(true).setSpacing(1)
-                    )
-                    .addMediaGalleryComponents(
-                        new MediaGalleryBuilder().addItems(
-                            new MediaGalleryItemBuilder().setURL(
-                                'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
-                            )
-                        )
-                    );
+                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'),
+                    ))
+                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                        '# Server Member Count',
+                        '',
+                        '## 👥 Total Members',
+                        `**${guild.memberCount.toLocaleString()}**`,
+                        '',
+                        '*Human and bot breakdown is not available in this cached-count version.*',
+                    ].join('\n')))
+                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`*Count requested by ${interaction.user.username}*`))
+                    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(1))
+                    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'),
+                    ));
 
-                return interaction.editReply({
-                    components: [memberContainer],
-                    flags: MessageFlags.IsComponentsV2,
-                });
-            }
-        } catch (error) {
-            console.error('Dashboard button error:', error);
-
-            if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
-                    content: 'Something went wrong with this dashboard button.',
-                    flags: MessageFlags.Ephemeral,
-                }).catch(console.error);
+                    components: [memberContainer],
+                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+                });
+
+                return;
             }
 
-            return;
-        }
-    }
+            // DOCK VERIFICATION BUTTON
+            if (interaction.customId === 'dock_verify') {
+                if (!process.env.DOCK_API_KEY || !process.env.DOCK_PID) {
+                    await interaction.reply({
+                        content: '❌ Verification is not configured. Please contact staff.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                    return;
+                }
 
-    // DOCK VERIFICATION
-    if (interaction.isButton() && interaction.customId === 'dock_verify') {
-        try {
-            const response = await fetch(
-                'https://api.docksys.xyz/api/v1/verify/session',
-                {
+                const response = await fetch('https://api.docksys.xyz/api/v1/verify/session', {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${process.env.DOCK_API_KEY}`,
@@ -513,565 +281,319 @@ client.on(Events.InteractionCreate, async interaction => {
                         clientId: interaction.user.id,
                         guildId: interaction.guild?.id,
                     }),
+                });
+
+                const payload = await response.json().catch(() => ({}));
+                console.log('Dock response:', payload);
+
+                if (!response.ok) {
+                    await interaction.reply({
+                        content: '❌ Could not create your verification session. Please try again later.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                    return;
                 }
-            );
 
-            const payload = await response.json();
-            console.log('Dock response:', payload);
+                const verifyUrl = payload?.data?.verifyUrl;
 
-            if (!response.ok) {
-                return interaction.reply({
-                    content: '❌ Could not create your verification session. Please try again later.',
-                    flags: MessageFlags.Ephemeral,
-                });
-            }
+                if (!verifyUrl) {
+                    console.error('No verifyUrl returned by Dock:', payload);
 
-            const verifyUrl = payload?.data?.verifyUrl;
+                    await interaction.reply({
+                        content: '❌ Dock did not return a verification link.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                    return;
+                }
 
-            if (!verifyUrl) {
-                console.error('No verifyUrl returned by Dock:', payload);
-
-                return interaction.reply({
-                    content: '❌ Dock did not return a verification link.',
-                    flags: MessageFlags.Ephemeral,
-                });
-            }
-
-            const verifyButton = new ButtonBuilder()
-                .setLabel('Verify with Dock')
-                .setStyle(ButtonStyle.Link)
-                .setURL(verifyUrl);
-
-            const row = new ActionRowBuilder().addComponents(verifyButton);
-
-            return interaction.reply({
-                content: '🔗 Click the button below to verify your Roblox account:',
-                components: [row],
-                flags: MessageFlags.Ephemeral,
-            });
-        } catch (error) {
-            console.error('Dock verification error:', error);
-
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: '❌ Something went wrong while creating your verification session.',
-                    flags: MessageFlags.Ephemeral,
-                }).catch(console.error);
-            }
-
-            return;
-        }
-    }
-
-    // SLASH COMMANDS
-    if (!interaction.isChatInputCommand()) return;
-
-    const command = interaction.client.commands.get(interaction.commandName);
-
-    if (!command) {
-        console.error(`No command matching ${interaction.commandName} was found.`);
-        return;
-    }
-
-    try {
-        await command.execute(interaction);
-    } catch (error) {
-        console.error(`Error executing ${interaction.commandName}`, error);
-
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({
-                content: 'There was an error while executing this command!',
-                flags: MessageFlags.Ephemeral,
-            }).catch(console.error);
-        } else {
-            await interaction.reply({
-                content: 'There was an error while executing this command!',
-                flags: MessageFlags.Ephemeral,
-            }).catch(console.error);
-        }
-    }
-});
-
-
-
-        // =========================
-        // SLASH COMMANDS
-        // =========================
-
-        if (
-            !interaction.isChatInputCommand()
-        ) {
-            return;
-        }
-
-
-        const command =
-            interaction.client.commands.get(
-                interaction.commandName
-            );
-
-
-        if (!command) {
-
-            console.error(
-                `No command matching ${interaction.commandName} was found.`
-            );
-
-            return;
-        }
-
-
-        try {
-
-            await command.execute(
-                interaction
-            );
-
-        } catch (error) {
-
-            console.error(
-                `Error executing ${interaction.commandName}`
-            );
-
-            console.error(error);
-
-
-            if (
-                interaction.replied ||
-                interaction.deferred
-            ) {
-
-                await interaction.followUp({
-
-                    content:
-                        'There was an error while executing this command!',
-
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-
-            } else {
+                const verifyButton = new ButtonBuilder()
+                    .setLabel('Verify with Dock')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(verifyUrl);
 
                 await interaction.reply({
-
-                    content:
-                        'There was an error while executing this command!',
-
-                    flags:
-                        MessageFlags.Ephemeral
+                    content: '🔗 Click the button below to verify your Roblox account:',
+                    components: [new ActionRowBuilder().addComponents(verifyButton)],
+                    flags: MessageFlags.Ephemeral,
                 });
-            }
-        }
-    }
-);
-
-
-// =========================
-// PERSISTENT STICKY HANDLER
-// =========================
-
-const stickyFile =
-    path.join(
-        __dirname,
-        'data',
-        'stickies.json'
-    );
-
-
-client.on(
-    Events.MessageCreate,
-    async message => {
-
-        if (
-            message.author.bot
-        ) return;
-
-        if (
-            !message.guild
-        ) return;
-
-
-        let stickies;
-
-
-        try {
-
-            stickies =
-                JSON.parse(
-
-                    fs.readFileSync(
-                        stickyFile,
-                        'utf8'
-                    )
-                );
-
-        } catch (error) {
-
-            console.error(
-                '❌ Could not read stickies.json:',
-                error
-            );
-
-            return;
-        }
-
-
-        const sticky =
-            stickies[
-                message.channel.id
-            ];
-
-
-        if (!sticky) return;
-
-
-        try {
-
-            try {
-
-                const oldSticky =
-                    await message.channel.messages.fetch(
-                        sticky.messageId
-                    );
-
-                await oldSticky.delete();
-
-            } catch {
-                // Previous sticky doesn't exist
-            }
-
-
-            const newSticky =
-                await message.channel.send({
-
-                    content:
-                        `📌 **Sticky Message**\n\n${sticky.message}`
-                });
-
-
-            stickies[
-                message.channel.id
-            ].messageId =
-                newSticky.id;
-
-
-            fs.writeFileSync(
-
-                stickyFile,
-
-                JSON.stringify(
-                    stickies,
-                    null,
-                    4
-                )
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                '❌ Error updating sticky:',
-                error
-            );
-        }
-    }
-);
-
-// TICKET RENAME COMMAND (-rename)
-// Text-prefix command, staff-only, only works inside ticket channels.
-// Usage: -rename <new-name>
-
-client.on(
-    Events.MessageCreate,
-    async message => {
-
-        if (message.author.bot) return;
-        if (!message.guild) return;
-        if (!message.content.startsWith('-rename ')) return;
-
-        const topic = message.channel.topic || '';
-        const isTicketChannel = topic.includes('ticket-owner:');
-
-        if (!isTicketChannel) return;
-
-        if (!isStaffMember(message.member)) {
-            await message.reply({
-                content: '❌ Only staff members can rename tickets.'
-            }).catch(() => {});
-            return;
-        }
-
-        const rawName = message.content.slice('-rename '.length).trim();
-
-        if (!rawName) {
-            await message.reply({
-                content: '❌ Usage: `-rename <new-name>`'
-            }).catch(() => {});
-            return;
-        }
-
-        const newName = sanitizeName(rawName, '');
-
-        if (!newName) {
-            await message.reply({
-                content: '❌ That name isn\u2019t valid — use letters, numbers, hyphens, or underscores.'
-            }).catch(() => {});
-            return;
-        }
-
-        try {
-
-            await message.channel.setName(newName);
-
-            await message.reply({
-                content: `✅ Renamed channel to **${newName}**.`
-            });
-
-        } catch (error) {
-
-            console.error('Error renaming channel via -rename:', error);
-
-            await message.reply({
-                content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.'
-            }).catch(() => {});
-        }
-    }
-);
-
-
-// =========================
-// TICKET CLAIM COMMANDS (-claim / -unclaim)
-// =========================
-// Staff-only, ticket channels only. Same rules as the Claim / Unclaim buttons.
-
-client.on(
-    Events.MessageCreate,
-    async message => {
-
-        if (message.author.bot) return;
-        if (!message.guild) return;
-
-        const content = message.content.trim().toLowerCase();
-
-        if (content === '-claim') {
-            await claimByMessage(message);
-        } else if (content === '-unclaim') {
-            await unclaimByMessage(message);
-        }
-    }
-);
-
-
-// =========================
-// GENERIC PREFIX COMMANDS (-command)
-// =========================
-// Lets every slash command also run as a "-command" text message, reusing
-// the same command.execute() logic by faking a minimal interaction object.
-//
-// Limitations:
-// - Ephemeral replies aren't private in a text message — they just post
-//   normally in the channel.
-// - Multi-argument commands (e.g. a command needing a user AND a reason)
-//   aren't parsed apart — everything after the (sub)command is passed as
-//   one string to any getString() call. Commands with a single text
-//   argument (like /tts say) work fine; commands expecting multiple
-//   distinct options may need their command file adjusted for proper
-//   text-command parsing.
-
-const PREFIX = '-';
-
-function getSubcommandNames(command) {
-    try {
-        const json = command.data.toJSON();
-        return (json.options || [])
-            .filter(opt => opt.type === 1) // ApplicationCommandOptionType.Subcommand
-            .map(opt => opt.name);
-    } catch (error) {
-        return [];
-    }
-}
-
-client.on(
-    Events.MessageCreate,
-    async message => {
-
-        if (message.author.bot) return;
-        if (!message.guild) return;
-        if (!message.content.startsWith(PREFIX)) return;
-
-        // Already handled by the dedicated -rename listener above.
-        if (message.content.startsWith('-rename ')) return;
-
-        const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-        const commandName = (args.shift() || '').toLowerCase();
-
-        if (!commandName) return;
-
-        const command = client.commands.get(commandName);
-        if (!command) return; // not a recognized command — ignore silently
-
-
-        // =========================
-        // PERMISSION CHECK
-        // =========================
-        // Mirrors whatever setDefaultMemberPermissions() the slash command
-        // was given, so -command can't bypass restrictions /command has.
-
-        let requiredPerms = null;
-
-        try {
-            requiredPerms = command.data.toJSON().default_member_permissions;
-        } catch (error) {
-            requiredPerms = null;
-        }
-
-        if (requiredPerms) {
-
-            const hasPerms =
-                message.member?.permissions?.has(BigInt(requiredPerms));
-
-            if (!hasPerms) {
-
-                await message.reply({
-                    content: '❌ You do not have permission to use this command.'
-                }).catch(() => {});
 
                 return;
             }
         }
 
+        // SLASH COMMANDS — keep this inside the async listener.
+        if (!interaction.isChatInputCommand()) return;
 
-        // =========================
-        // FAKE INTERACTION
-        // =========================
+        const command = client.commands.get(interaction.commandName);
 
-        const subcommandNames = getSubcommandNames(command);
+        if (!command) {
+            console.error(`No command matching ${interaction.commandName} was found.`);
+            return;
+        }
 
-        let sentMessage = null;
-        let deferredFlag = false;
-        let repliedFlag = false;
+        await command.execute(interaction);
+    } catch (error) {
+        console.error('Interaction handler error:', error);
 
-        const fakeInteraction = {
+        if (!interaction.isRepliable() || interaction.replied || interaction.deferred) {
+            if (interaction.isRepliable() && (interaction.replied || interaction.deferred)) {
+                await interaction.followUp({
+                    content: 'There was an error while handling this interaction.',
+                    flags: MessageFlags.Ephemeral,
+                }).catch(() => {});
+            }
+            return;
+        }
 
-            commandName,
-            user: message.author,
-            member: message.member,
-            guild: message.guild,
-            guildId: message.guild.id,
-            channel: message.channel,
-            client: message.client,
+        await interaction.reply({
+            content: 'There was an error while handling this interaction.',
+            flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+    }
+});
 
-            isChatInputCommand: () => true,
+// PERSISTENT STICKY HANDLER
+const stickyFile = path.join(__dirname, 'data', 'stickies.json');
 
-            get replied() {
-                return repliedFlag;
-            },
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild) return;
 
-            get deferred() {
-                return deferredFlag;
-            },
+    let stickies;
 
-            options: {
+    try {
+        stickies = JSON.parse(fs.readFileSync(stickyFile, 'utf8'));
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.error('❌ Could not read stickies.json:', error);
+        }
+        return;
+    }
 
-                getSubcommand(required = true) {
+    const sticky = stickies[message.channel.id];
+    if (!sticky) return;
 
-                    const first = (args[0] || '').toLowerCase();
+    try {
+        try {
+            const oldSticky = await message.channel.messages.fetch(sticky.messageId);
+            await oldSticky.delete();
+        } catch {
+            // The previous sticky message may have been deleted already.
+        }
 
-                    if (subcommandNames.includes(first)) {
-                        return args.shift().toLowerCase();
-                    }
+        const newSticky = await message.channel.send({
+            content: `📌 **Sticky Message**\n\n${sticky.message}`,
+        });
 
-                    if (required) {
-                        throw new Error(
-                            `Missing subcommand. Usage: -${commandName} <${subcommandNames.join('|')}>`
-                        );
-                    }
+        stickies[message.channel.id].messageId = newSticky.id;
+        fs.writeFileSync(stickyFile, JSON.stringify(stickies, null, 4));
+    } catch (error) {
+        console.error('❌ Error updating sticky:', error);
+    }
+});
 
-                    return null;
-                },
+// -rename: staff-only ticket channel rename.
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild || !message.content.startsWith('-rename ')) return;
+    if (!(message.channel.topic || '').includes('ticket-owner:')) return;
 
-                getString(required = false) {
-                    const value = args.join(' ').trim();
-                    return value || null;
-                },
-            },
+    if (!isStaffMember(message.member)) {
+        await message.reply({ content: '❌ Only staff members can rename tickets.' }).catch(() => {});
+        return;
+    }
 
-            deferReply: async () => {
-                deferredFlag = true;
-                await message.channel.sendTyping().catch(() => {});
-            },
+    const rawName = message.content.slice('-rename '.length).trim();
 
-            reply: async payload => {
+    if (!rawName) {
+        await message.reply({ content: '❌ Usage: `-rename <new-name>`' }).catch(() => {});
+        return;
+    }
 
-                const content =
-                    typeof payload === 'string' ? payload : payload.content;
+    const newName = sanitizeName(rawName, '');
 
-                sentMessage = await message.reply({
-                    content,
-                    embeds: payload?.embeds,
-                    components: payload?.components,
-                }).catch(() => null);
+    if (!newName) {
+        await message.reply({
+            content: '❌ That name isn’t valid — use letters, numbers, hyphens, or underscores.',
+        }).catch(() => {});
+        return;
+    }
 
-                repliedFlag = true;
+    try {
+        await message.channel.setName(newName);
+        await message.reply({ content: `✅ Renamed channel to **${newName}**.` });
+    } catch (error) {
+        console.error('Error renaming channel via -rename:', error);
 
-                return sentMessage;
-            },
+        await message.reply({
+            content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.',
+        }).catch(() => {});
+    }
+});
 
-            editReply: async payload => {
+// -claim and -unclaim ticket commands.
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild) return;
 
-                const content =
-                    typeof payload === 'string' ? payload : payload.content;
+    const content = message.content.trim().toLowerCase();
 
-                if (sentMessage) {
-                    return sentMessage.edit({
-                        content,
-                        embeds: payload?.embeds,
-                        components: payload?.components,
-                    }).catch(() => null);
+    try {
+        if (content === '-claim') {
+            await claimByMessage(message);
+        } else if (content === '-unclaim') {
+            await unclaimByMessage(message);
+        }
+    } catch (error) {
+        console.error('Error handling ticket claim command:', error);
+    }
+});
+
+// Prefix commands (-command) reuse each command's execute() function.
+const PREFIX = '-';
+
+function getSubcommandNames(command) {
+    try {
+        return (command.data.toJSON().options || [])
+            .filter(option => option.type === 1)
+            .map(option => option.name);
+    } catch {
+        return [];
+    }
+}
+
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
+    if (message.content.startsWith('-rename ')) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+    const commandName = (args.shift() || '').toLowerCase();
+
+    if (!commandName) return;
+
+    const command = client.commands.get(commandName);
+    if (!command) return;
+
+    let requiredPerms = null;
+
+    try {
+        requiredPerms = command.data.toJSON().default_member_permissions;
+    } catch {
+        requiredPerms = null;
+    }
+
+    if (requiredPerms && !message.member?.permissions?.has(BigInt(requiredPerms))) {
+        await message.reply({
+            content: '❌ You do not have permission to use this command.',
+        }).catch(() => {});
+        return;
+    }
+
+    const subcommandNames = getSubcommandNames(command);
+
+    let sentMessage = null;
+    let deferredFlag = false;
+    let repliedFlag = false;
+
+    const fakeInteraction = {
+        commandName,
+        user: message.author,
+        member: message.member,
+        guild: message.guild,
+        guildId: message.guild.id,
+        channel: message.channel,
+        client: message.client,
+
+        isChatInputCommand: () => true,
+        isRepliable: () => true,
+
+        get replied() {
+            return repliedFlag;
+        },
+
+        get deferred() {
+            return deferredFlag;
+        },
+
+        options: {
+            getSubcommand(required = true) {
+                const first = (args[0] || '').toLowerCase();
+
+                if (subcommandNames.includes(first)) {
+                    return args.shift().toLowerCase();
                 }
 
-                sentMessage = await message.reply({
-                    content,
-                    embeds: payload?.embeds,
-                    components: payload?.components,
-                }).catch(() => null);
+                if (required) {
+                    throw new Error(
+                        `Missing subcommand. Usage: -${commandName} <${subcommandNames.join('|')}>`
+                    );
+                }
 
-                repliedFlag = true;
-
-                return sentMessage;
+                return null;
             },
 
-            followUp: async payload => {
-
-                const content =
-                    typeof payload === 'string' ? payload : payload.content;
-
-                return message.channel.send({
-                    content,
-                    embeds: payload?.embeds,
-                    components: payload?.components,
-                }).catch(() => null);
+            getString() {
+                return args.join(' ').trim() || null;
             },
-        };
+        },
 
-        try {
+        deferReply: async () => {
+            deferredFlag = true;
+            await message.channel.sendTyping().catch(() => {});
+        },
 
-            await command.execute(fakeInteraction);
+        reply: async payload => {
+            const options = typeof payload === 'string' ? { content: payload } : {
+                content: payload?.content,
+                embeds: payload?.embeds,
+                components: payload?.components,
+            };
 
-        } catch (error) {
+            sentMessage = await message.reply(options).catch(() => null);
+            repliedFlag = true;
+            return sentMessage;
+        },
 
-            console.error(`Error executing -${commandName}:`, error);
+        editReply: async payload => {
+            const options = typeof payload === 'string' ? { content: payload } : {
+                content: payload?.content,
+                embeds: payload?.embeds,
+                components: payload?.components,
+            };
 
-            await message.reply({
-                content: `❌ ${error.message || 'Something went wrong running that command.'}`
-            }).catch(() => {});
-        }
+            if (sentMessage) {
+                return sentMessage.edit(options).catch(() => null);
+            }
+
+            sentMessage = await message.reply(options).catch(() => null);
+            repliedFlag = true;
+            return sentMessage;
+        },
+
+        followUp: async payload => {
+            const options = typeof payload === 'string' ? { content: payload } : {
+                content: payload?.content,
+                embeds: payload?.embeds,
+                components: payload?.components,
+            };
+
+            return message.channel.send(options).catch(() => null);
+        },
+    };
+
+    try {
+        await command.execute(fakeInteraction);
+    } catch (error) {
+        console.error(`Error executing -${commandName}:`, error);
+
+        await message.reply({
+            content: `❌ ${error.message || 'Something went wrong running that command.'}`,
+        }).catch(() => {});
     }
-);
+});
 
+// Login.
+if (!process.env.BOT_TOKEN) {
+    throw new Error('BOT_TOKEN is missing from the environment.');
+}
 
-// =========================
-// LOGIN
-// =========================
-
-client.login(process.env.BOT_TOKEN);
+client.login(process.env.BOT_TOKEN).catch(error => {
+    console.error('❌ Discord login failed:', error);
+});
