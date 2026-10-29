@@ -71,7 +71,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('dashboard')
         .setDescription('Posts the server dashboard panel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
     async execute(interaction) {
         await interaction.deferReply({
