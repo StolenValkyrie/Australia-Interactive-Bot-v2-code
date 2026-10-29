@@ -13,20 +13,13 @@ const {
     REST,
     Routes,
     MessageFlags,
-    EmbedBuilder,
-    ContainerBuilder,
-    TextDisplayBuilder,
-    SeparatorBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle
 } = require('discord.js');
 
-// New support ticket system (General / High Rankings / Partnerships / Report)
-const { handleTicketInteraction } = require('./ticket/handler');
-
-// Role pinged / given access on ban appeal tickets (from /appeals)
-const APPEALS_ROLE_ID = '1497464387429073037';
+// Support ticket system (General / High Rankings / Partnerships / Report)
+const { handleTicketInteraction, claimByMessage, unclaimByMessage, logTicketClosed } = require('./ticket/handler');
 
 const client = new Client({
     intents: [
@@ -48,14 +41,8 @@ require('./logger.js')(client);
 client.commands = new Collection();
 
 // =========================
-// SHARED CONSTANTS / HELPERS
+// SHARED HELPERS
 // =========================
-
-// Category all tickets get created under, regardless of type.
-const TICKET_CATEGORY_ID = '1497142936461246464';
-
-// Role pinged and given access on Partnerships tickets specifically.
-const PARTNERSHIPS_ROLE_ID = '1537742446358696022';
 
 // Discord channel names: lowercase, alphanumeric + hyphen/underscore only.
 function sanitizeName(str, fallback = 'ticket') {
@@ -78,11 +65,8 @@ function isStaffMember(member) {
 // =========================
 // TICKET CLAIM STORE
 // =========================
-// Claim state lives here instead of the channel topic. Discord shares one
-// rate-limit bucket (2 changes / 10 min) across BOTH name and topic edits
-// on a channel — if claim/unclaim kept calling setTopic(), it was eating
-// the same budget -rename needs. Tracking claims in a file avoids ever
-// touching name/topic during claim/unclaim.
+// Same file the ticket system (ticket/handler.js) uses. Needed here so
+// -close can clear a ticket's claim when it deletes the channel.
 
 const claimsFile = path.join(__dirname, 'data', 'claims.json');
 
@@ -106,7 +90,7 @@ function saveClaims(claims) {
 // =========================
 // TICKET CLOSE COMMAND (-close)
 // =========================
-// Usage: -close <reason>
+// Usage: -close <reason>   (reason is optional, N/A if left out)
 // Staff-only, ticket channels only.
 
 client.on(
@@ -150,15 +134,7 @@ client.on(
                 .slice('-close'.length)
                 .trim();
 
-        if (!reason) {
-
-            await message.reply({
-                content:
-                    '❌ Please provide a reason.\nUsage: `-close <reason>`'
-            }).catch(() => {});
-
-            return;
-        }
+        // Reason is optional: with no reason the log and message say N/A
 
         // =========================
         // CLOSING MESSAGE
@@ -168,9 +144,20 @@ client.on(
             content:
                 `🔒 **Ticket Closing**\n\n` +
                 `**Closed by:** ${message.author}\n` +
-                `**Reason:** ${reason}\n\n` +
+                `**Reason:** ${reason || 'N/A'}\n\n` +
                 `This ticket will be closed shortly.`
         }).catch(() => {});
+
+        // =========================
+        // LOG THE CLOSE
+        // =========================
+
+        await logTicketClosed(
+            message.client,
+            message.channel,
+            message.author.id,
+            reason
+        );
 
         // =========================
         // DELETE AFTER DELAY
@@ -303,7 +290,7 @@ client.once(Events.ClientReady, async () => {
         process.env.ACTIVITY_TYPE || 'PLAYING';
 
     const activityName =
-        process.env.ACTIVITY_NAME || 'Discord';
+        process.env.ACTIVITY_NAME || 'discord.gg/ausi';
 
 
     const activityTypeMap = {
@@ -366,1011 +353,130 @@ client.on(
     Events.InteractionCreate,
     async interaction => {
 
-        // New support ticket system (buttons + modals starting with "ticket:")
+        // =========================
+        // SUPPORT TICKETS
+        // =========================
+        // Buttons + modals whose customId starts with "ticket:"
+
         if (await handleTicketInteraction(interaction)) return;
 
-// =========================
-// DOCK VERIFICATION
-// =========================
-
-if (
-    interaction.isButton() &&
-    interaction.customId === 'dock_verify'
-) {
-
-    try {
-
-        const response = await fetch(
-            'https://api.docksys.xyz/api/v1/verify/session',
-            {
-                method: 'POST',
-
-                headers: {
-                    Authorization:
-                        `Bearer ${process.env.DOCK_API_KEY}`,
-
-                    'Content-Type':
-                        'application/json'
-                },
-
-                body: JSON.stringify({
-                    pid:
-                        process.env.DOCK_PID,
-
-                    clientId:
-                        interaction.user.id,
-
-                    guildId:
-                        interaction.guild.id
-                })
-            }
-        );
-
-        const payload =
-            await response.json();
-
-        console.log('Dock response:', payload);
-
-        if (!response.ok) {
-
-            await interaction.reply({
-                content:
-                    '❌ Could not create your verification session. Please try again later.',
-
-                flags:
-                    MessageFlags.Ephemeral
-            });
-
-            return;
-        }
-
-        const verifyUrl =
-            payload?.data?.verifyUrl;
-
-        if (!verifyUrl) {
-
-            console.error(
-                'No verifyUrl returned by Dock:',
-                payload
-            );
-
-            await interaction.reply({
-                content:
-                    '❌ Dock did not return a verification link.',
-
-                flags:
-                    MessageFlags.Ephemeral
-            });
-
-            return;
-        }
-
-        const verifyButton =
-            new ButtonBuilder()
-                .setLabel('Verify with Dock')
-                .setStyle(ButtonStyle.Link)
-                .setURL(verifyUrl);
-
-        const row =
-            new ActionRowBuilder()
-                .addComponents(
-                    verifyButton
-                );
-
-        await interaction.reply({
-            content:
-                '🔗 Click the button below to verify your Roblox account:',
-
-            components:
-                [row],
-
-            flags:
-                MessageFlags.Ephemeral
-        });
-
-    } catch (error) {
-
-        console.error(
-            'Dock verification error:',
-            error
-        );
-
-        if (!interaction.replied) {
-
-            await interaction.reply({
-                content:
-                    '❌ Something went wrong while creating your verification session.',
-
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-    }
-
-    return;
-}
-
-
 
         // =========================
-        // TICKET BUTTONS
-        // =========================
-
-        if (interaction.isButton()) {
-
-
-            // =========================
-            // CHECK STAFF
-            // =========================
-
-            const isStaff = isStaffMember(interaction.member);
-
-
-            // =========================
-            // CLAIM TICKET
-            // =========================
-
-            if (
-                interaction.customId ===
-                'claim_ticket'
-            ) {
-
-                if (!isStaff) {
-
-                    await interaction.reply({
-
-                        content:
-                            '❌ Only staff members can claim tickets.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                const claims = loadClaims();
-                const existingClaim = claims[interaction.channel.id];
-
-
-                if (existingClaim) {
-
-                    const claimedUserId =
-                        existingClaim.claimedBy;
-
-
-                    if (
-                        claimedUserId ===
-                        interaction.user.id
-                    ) {
-
-                        await interaction.reply({
-
-                            content:
-                                '⚠️ You have already claimed this ticket.',
-
-                            flags:
-                                MessageFlags.Ephemeral
-                        });
-
-                        return;
-                    }
-
-
-                    const claimedUser =
-                        await interaction.client.users
-                            .fetch(
-                                claimedUserId
-                            )
-                            .catch(
-                                () => null
-                            );
-
-
-                    await interaction.reply({
-
-                        content:
-                            `❌ This ticket is already claimed by ${claimedUser ? claimedUser : `<@${claimedUserId}>`}.`,
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                claims[interaction.channel.id] = {
-                    claimedBy: interaction.user.id
-                };
-
-                saveClaims(claims);
-
-
-                await interaction.reply({
-
-                    content:
-                        `✅ ${interaction.user} has claimed this ticket.`
-                });
-
-                return;
-            }
-
-
-            // =========================
-            // UNCLAIM TICKET
-            // =========================
-
-            if (
-                interaction.customId ===
-                'unclaim_ticket'
-            ) {
-
-                if (!isStaff) {
-
-                    await interaction.reply({
-
-                        content:
-                            '❌ Only staff members can unclaim tickets.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                const claims = loadClaims();
-                const existingClaim = claims[interaction.channel.id];
-
-
-                if (!existingClaim) {
-
-                    await interaction.reply({
-
-                        content:
-                            '⚠️ This ticket is not currently claimed.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                const claimedUserId =
-                    existingClaim.claimedBy;
-
-
-                if (
-                    claimedUserId !==
-                    interaction.user.id
-                ) {
-
-                    await interaction.reply({
-
-                        content:
-                            `❌ This ticket was claimed by <@${claimedUserId}>, so only they can unclaim it.`,
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                delete claims[interaction.channel.id];
-
-                saveClaims(claims);
-
-
-                await interaction.reply({
-
-                    content:
-                        `✅ ${interaction.user} has unclaimed this ticket.`
-                });
-
-                return;
-            }
-
-
-            // =========================
-            // CLOSE TICKET
-            // =========================
-
-            if (
-                interaction.customId ===
-                'close_ticket'
-            ) {
-
-                if (!isStaff) {
-
-                    await interaction.reply({
-
-                        content:
-                            '❌ Only staff members can close tickets.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-
-                await interaction.reply({
-
-                    content:
-                        '🔒 Closing this ticket...',
-
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-
-
-                setTimeout(
-                    async () => {
-
-                        try {
-
-                            const claims = loadClaims();
-
-                            if (claims[interaction.channel.id]) {
-                                delete claims[interaction.channel.id];
-                                saveClaims(claims);
-                            }
-
-                            await interaction.channel.delete();
-
-                        } catch (error) {
-
-                            console.error(
-                                'Error closing ticket:',
-                                error
-                            );
-                        }
-
-                    },
-                    1500
-                );
-
-                return;
-            }
-
-
-            return;
-        }
-
-
-        // =========================
-        // TICKET SELECT MENU
+        // DOCK VERIFICATION
         // =========================
 
         if (
-            interaction.isStringSelectMenu()
+            interaction.isButton() &&
+            interaction.customId === 'dock_verify'
         ) {
-
-            if (
-                interaction.customId !== 'ticket_select' &&
-                interaction.customId !== 'appeals_select'
-            ) {
-                return;
-            }
-
-
-            // Whether this selection came from /appeals rather than /dashboard
-            const isAppeal =
-                interaction.customId === 'appeals_select';
-
-
-            const selected =
-                interaction.values[0];
-
-
-            // =========================
-            // GUIDELINES
-            // =========================
-
-            if (
-                !isAppeal &&
-                selected ===
-                'guidelines'
-            ) {
-
-                const rulesEmbed =
-                    new EmbedBuilder()
-
-                        .setColor(
-                            0x5865F2
-                        )
-
-                        .setTitle(
-                            'Waratah Heights Rules'
-                        )
-
-                        .setDescription(
-                            'Please read and follow all rules while participating in Waratah Heights.'
-                        )
-
-                        .addFields(
-
-                            {
-                                name:
-                                    '🎭 Game Rules',
-
-                                value:
-                                    '**Metagaming** – Do not use OOC information to benefit from your RP.\n' +
-                                    '**Powergaming** – Do not force RP actions; use "-tries-" instead of auto-success.\n' +
-                                    '**New Life Rule (NLR)** – After dying, forget the events leading to your death and do not return to the same scene.\n' +
-                                    '**Fear RP** – Value your life and act realistically when threatened.\n' +
-                                    '**Scenes** – Keep scenes realistic, under 30 minutes unless approved, and do not interfere with other active scenes.\n' +
-                                    '**Leaving Scenes** – Do not leave the game during an active RP scene.\n' +
-                                    '**Roleplay Quality** – Stay in character, avoid trolling/OOC during scenes, don\u2019t start scenes in Safezones, and avoid repeating identical scenarios.\n' +
-                                    '**Suicide/Terrorist RP** – Suicide RP, terrorism, or recreating terrorist events is prohibited.'
-                            },
-
-                            {
-                                name:
-                                    '🚗 Vehicle Rules',
-
-                                value:
-                                    '**Fail RP (FRP)** – RP injuries or vehicle damage after major crashes.\n' +
-                                    '**Driving** – No unrealistic driving unless fleeing police.\n' +
-                                    '**Pursuits** – Respect pursuit cooldowns and never spawn vehicles during pursuits.\n' +
-                                    '**VDM** – Do not intentionally ram players or vehicles without valid RP.\n' +
-                                    '**Desync Abuse** – Do not abuse lag or desync.\n' +
-                                    '**Emergency Vehicles** – Always give way to emergency services.'
-                            },
-
-                            {
-                                name:
-                                    '🔫 Firearms & Weapons',
-
-                                value:
-                                    '• Respect firearm cooldowns.\n' +
-                                    '• Firearms may only be used during active scenes.\n' +
-                                    '• Staff cannot be taken hostage.\n' +
-                                    '• No Random Deathmatch (RDM).\n' +
-                                    '• Use firearms realistically; don\u2019t shoot over minor situations.\n' +
-                                    '• No unnecessary shooting in public areas.\n' +
-                                    '• No open carrying outside RP.\n' +
-                                    '• Melee weapons may start scenes if realistic.\n' +
-                                    '• Do not abuse downed/restrained players.\n' +
-                                    '• No unrealistic weapon swapping during fights.'
-                            },
-
-                            {
-                                name:
-                                    '🚔 Police & Crime',
-
-                                value:
-                                    '• Damaged vehicles must stop fleeing.\n' +
-                                    '• RP realistic surrenders when caught.\n' +
-                                    '• Respect all pursuit/firearm cooldowns.\n' +
-                                    '• LTAA (Leaving to Avoid Arrest) is prohibited.\n' +
-                                    '• No crimes during Peacetime.\n' +
-                                    '• Crimes require realistic motives.\n' +
-                                    '• Robberies, kidnappings, and hostages must be planned realistically.\n' +
-                                    '• Do not impersonate staff.\n' +
-                                    '• No cop baiting.\n' +
-                                    '• Maximum 4 people per criminal scene unless management approves.'
-                            },
-
-                            {
-                                name:
-                                    '🛡️ Staff Rules',
-
-                                value:
-                                    '• LTAP (Leaving to Avoid Punishment) is prohibited.\n' +
-                                    '• Do not interrupt staff scenes.\n' +
-                                    '• Remain respectful and professional with staff.\n' +
-                                    '• Follow staff decisions.'
-                            },
-
-                            {
-                                name:
-                                    '⚔️ Gang Rules',
-
-                                value:
-                                    '• Unapproved gangs are prohibited.\n' +
-                                    '• Gang RP must remain realistic with valid motives.\n' +
-                                    '• Gang territories and wars require staff approval.\n' +
-                                    '• Only approved members may wear gang colours.\n' +
-                                    '• All gang activity must follow general RP and Peacetime rules.'
-                            },
-
-                            {
-                                name:
-                                    '💬 Discord Rules',
-
-                                value:
-                                    '• Treat everyone respectfully; discrimination or harassment is prohibited.\n' +
-                                    '• Use channels correctly.\n' +
-                                    '• No advertising.\n' +
-                                    '• No spam or excessive pinging.\n' +
-                                    '• Do not ask for roles or promotions.\n' +
-                                    '• You must be at least 13 years old.'
-                            },
-
-                            {
-                                name:
-                                    '⚠️ Disclaimer',
-
-                                value:
-                                    'Breaking these rules may result in warnings, kicks, timeouts, bans, or permanent bans depending on severity.\n\n' +
-                                    'Management+ may issue punishments at their discretion if actions threaten the community, its members, or the integrity of Waratah Heights, even if a specific rule is not listed.'
-                            }
-                        )
-
-                        .setFooter({
-
-                            text:
-                                'Waratah Heights • Rules & Guidelines • Website: australia-interactive-website.web.app'
-                        });
-
-
-                await interaction.reply({
-
-                    embeds:
-                        [rulesEmbed],
-
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-
-                return;
-            }
-
-
-            // =========================
-            // TICKET TYPES
-            // =========================
-
-            const ticketNames = {
-
-                support:
-                    'support',
-
-                report:
-                    'report',
-
-                partnerships:
-                    'partnerships',
-
-                other:
-                    'other',
-
-                discord_ban_appeal:
-                    'discord-ban-appeal',
-
-                game_ban_appeal:
-                    'game-ban-appeal'
-            };
-
-
-            // Nicely formatted names shown in messages/titles
-            const ticketDisplayNames = {
-
-                support:
-                    'Support',
-
-                report:
-                    'Report',
-
-                other:
-                    'Other',
-
-                'discord-ban-appeal':
-                    'Discord Ban Appeal',
-
-                'game-ban-appeal':
-                    'Game Ban Appeal'
-            };
-
-
-            const ticketType =
-                ticketNames[selected] ||
-                'other';
-
-            const ticketDisplay =
-                ticketDisplayNames[ticketType] ||
-                ticketType;
-
-
-            // =========================
-            // SAFE USERNAME
-            // =========================
-
-            const safeUsername =
-                sanitizeName(interaction.user.username, 'user');
-
-
-            // =========================
-            // TICKET NAME
-            // =========================
-
-            const ticketName =
-                `${ticketType}-${safeUsername}`;
-
-
-            // =========================
-            // CHECK EXISTING TICKET
-            // =========================
-
-            const existingTicket =
-                interaction.guild.channels.cache.find(
-
-                    channel =>
-
-                        channel.type === 0 &&
-
-                        channel.topic?.includes(
-                            `ticket-owner:${interaction.user.id}`
-                        )
-                );
-
-
-            if (existingTicket) {
-
-                await interaction.reply({
-
-                    content:
-                        `❌ You already have a ticket: ${existingTicket}`,
-
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-
-                return;
-            }
-
 
             try {
 
-                // =========================
-                // CREATE CHANNEL
-                // =========================
-
-                const permissionOverwrites = [
-
-                    // Everyone
+                const response = await fetch(
+                    'https://api.docksys.xyz/api/v1/verify/session',
                     {
-                        id:
-                            interaction.guild.id,
+                        method: 'POST',
 
-                        deny: [
-                            'ViewChannel'
-                        ]
-                    },
+                        headers: {
+                            Authorization:
+                                `Bearer ${process.env.DOCK_API_KEY}`,
 
+                            'Content-Type':
+                                'application/json'
+                        },
 
-                    // Ticket Owner
-                    {
-                        id:
-                            interaction.user.id,
+                        body: JSON.stringify({
+                            pid:
+                                process.env.DOCK_PID,
 
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory'
-                        ]
-                    },
+                            clientId:
+                                interaction.user.id,
 
-
-                    // Bot
-                    {
-                        id:
-                            interaction.client.user.id,
-
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory',
-                            'ManageChannels'
-                        ]
+                            guildId:
+                                interaction.guild.id
+                        })
                     }
-                ];
+                );
 
+                const payload =
+                    await response.json();
 
-                // =========================
-                // STAFF PERMISSIONS
-                // =========================
+                console.log('Dock response:', payload);
 
-                if (
-                    isAppeal
-                ) {
+                if (!response.ok) {
 
-                    // BAN APPEALS ROLE ONLY
-                    permissionOverwrites.push({
+                    await interaction.reply({
+                        content:
+                            '❌ Could not create your verification session. Please try again later.',
 
-                        id:
-                            APPEALS_ROLE_ID,
-
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory'
-                        ]
+                        flags:
+                            MessageFlags.Ephemeral
                     });
 
-                } else if (
-                    ticketType ===
-                    'report'
-                ) {
-
-                    // REPORT ROLE ONLY
-                    permissionOverwrites.push({
-
-                        id:
-                            '1499382533803085975',
-
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory'
-                        ]
-                    });
-
-                } else if (
-                    ticketType ===
-                    'partnerships'
-                ) {
-
-                    // PARTNERSHIPS ROLE
-                    permissionOverwrites.push({
-
-                        id:
-                            PARTNERSHIPS_ROLE_ID,
-
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory'
-                        ]
-                    });
-
-                } else {
-
-                    // NORMAL STAFF ROLE
-                    // (support, other, discord-ban-appeal, game-ban-appeal)
-                    permissionOverwrites.push({
-
-                        id:
-                            process.env.STAFF_ROLE_ID,
-
-                        allow: [
-                            'ViewChannel',
-                            'SendMessages',
-                            'ReadMessageHistory'
-                        ]
-                    });
+                    return;
                 }
 
+                const verifyUrl =
+                    payload?.data?.verifyUrl;
 
-                const ticketChannel =
-                    await interaction.guild.channels.create({
+                if (!verifyUrl) {
 
-                        name:
-                            ticketName,
+                    console.error(
+                        'No verifyUrl returned by Dock:',
+                        payload
+                    );
 
-                        type:
-                            0,
+                    await interaction.reply({
+                        content:
+                            '❌ Dock did not return a verification link.',
 
-                        parent:
-                            TICKET_CATEGORY_ID,
-
-                        topic:
-                            `ticket-owner:${interaction.user.id};ticket-type:${ticketType}`,
-
-                        permissionOverwrites:
-                            permissionOverwrites
+                        flags:
+                            MessageFlags.Ephemeral
                     });
 
+                    return;
+                }
 
-                // =========================
-                // CONFIRMATION
-                // =========================
+                const verifyButton =
+                    new ButtonBuilder()
+                        .setLabel('Verify with Dock')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(verifyUrl);
+
+                const row =
+                    new ActionRowBuilder()
+                        .addComponents(
+                            verifyButton
+                        );
 
                 await interaction.reply({
-
                     content:
-                        `✅ Your **${ticketDisplay}** ticket has been created: ${ticketChannel}`,
+                        '🔗 Click the button below to verify your Roblox account:',
+
+                    components:
+                        [row],
 
                     flags:
                         MessageFlags.Ephemeral
                 });
-
-
-                // =========================
-                // TICKET PING
-                // =========================
-
-                const ticketPing =
-                    isAppeal
-
-                        ? `<@&${APPEALS_ROLE_ID}>`
-
-                        : ticketType === 'report'
-
-                            ? '<@&1499382533803085975>'
-
-                            : ticketType === 'partnerships'
-
-                                ? `<@&${PARTNERSHIPS_ROLE_ID}>`
-
-                            : `<@&${process.env.STAFF_ROLE_ID}>`;
-
-
-                // =========================
-                // TICKET CONTAINER
-                // =========================
-
-                const container =
-                    new ContainerBuilder()
-
-                        .setAccentColor(
-                            0x5865F2
-                        )
-
-
-                        // =========================
-                        // TITLE
-                        // =========================
-
-                        .addTextDisplayComponents(
-
-                            new TextDisplayBuilder()
-
-                                .setContent(
-
-                                    `# ${ticketDisplay} Ticket`
-                                )
-                        )
-
-
-                        // =========================
-                        // DESCRIPTION
-                        // =========================
-
-                        .addTextDisplayComponents(
-
-                            new TextDisplayBuilder()
-
-                                .setContent(
-
-                                    `Welcome <@${interaction.user.id}>!\n\n` +
-
-                                    `Thanks for contacting support. Please explain your issue and a member of our staff team will assist you shortly.\n\n` +
-
-                                    `Ping: ${ticketPing}`
-                                )
-                        )
-
-
-                        // =========================
-                        // SEPARATOR
-                        // =========================
-
-                        .addSeparatorComponents(
-
-                            new SeparatorBuilder()
-
-                                .setDivider(true)
-
-                                .setSpacing(1)
-                        )
-
-
-                        // =========================
-                        // BUTTONS
-                        // =========================
-
-                        .addActionRowComponents(
-
-                            new ActionRowBuilder()
-
-                                .addComponents(
-
-                                    new ButtonBuilder()
-
-                                        .setCustomId(
-                                            'claim_ticket'
-                                        )
-
-                                        .setLabel(
-                                            'Claim'
-                                        )
-
-                                        .setEmoji(
-                                            '🙋'
-                                        )
-
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        ),
-
-
-                                    new ButtonBuilder()
-
-                                        .setCustomId(
-                                            'unclaim_ticket'
-                                        )
-
-                                        .setLabel(
-                                            'Unclaim'
-                                        )
-
-                                        .setEmoji(
-                                            '↩️'
-                                        )
-
-                                        .setStyle(
-                                            ButtonStyle.Secondary
-                                        ),
-
-
-                                    new ButtonBuilder()
-
-                                        .setCustomId(
-                                            'close_ticket'
-                                        )
-
-                                        .setLabel(
-                                            'Close Ticket'
-                                        )
-
-                                        .setEmoji(
-                                            '🔒'
-                                        )
-
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                )
-                        );
-
-
-                // =========================
-                // SEND TICKET PANEL
-                // =========================
-
-                await ticketChannel.send({
-
-                    components:
-                        [container],
-
-                    flags:
-                        MessageFlags.IsComponentsV2
-                });
-
 
             } catch (error) {
 
                 console.error(
-                    'Error creating ticket:',
+                    'Dock verification error:',
                     error
                 );
 
-
-                if (
-                    !interaction.replied
-                ) {
+                if (!interaction.replied) {
 
                     await interaction.reply({
-
                         content:
-                            'There was an error while creating the ticket!',
+                            '❌ Something went wrong while creating your verification session.',
 
                         flags:
                             MessageFlags.Ephemeral
                     });
                 }
-
-                return;
             }
 
             return;
@@ -1560,10 +666,7 @@ client.on(
     }
 );
 
-
-// =========================
 // TICKET RENAME COMMAND (-rename)
-// =========================
 // Text-prefix command, staff-only, only works inside ticket channels.
 // Usage: -rename <new-name>
 
@@ -1620,6 +723,29 @@ client.on(
             await message.reply({
                 content: '❌ Failed to rename the channel. Discord only allows 2 renames per 10 minutes per channel — try again shortly.'
             }).catch(() => {});
+        }
+    }
+);
+
+
+// =========================
+// TICKET CLAIM COMMANDS (-claim / -unclaim)
+// =========================
+// Staff-only, ticket channels only. Same rules as the Claim / Unclaim buttons.
+
+client.on(
+    Events.MessageCreate,
+    async message => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+
+        const content = message.content.trim().toLowerCase();
+
+        if (content === '-claim') {
+            await claimByMessage(message);
+        } else if (content === '-unclaim') {
+            await unclaimByMessage(message);
         }
     }
 );

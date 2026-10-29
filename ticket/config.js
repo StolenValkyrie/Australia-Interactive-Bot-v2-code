@@ -123,7 +123,7 @@ module.exports = {
   // closing log or smth
   log: {
     title: '## Ticket Closed',
-    database: 'Unavailable', // shown as "Database: ..."
+    database: 'Available (/ticket-database)', // shown as "Database: ..."
     version: '1.0',
     madeFor: 'Made for Australia Interactive (AI1X25)',
   },
