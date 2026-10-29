@@ -276,23 +276,23 @@ client.on(Events.InteractionCreate, async interaction => {
                         )
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent([
-                                '# 📊 Server Statistics',
+                                '# Server Stats',
                                 '',
-                                '## 👥 Total Members',
+                                '## Total Members',
                                 `**${totalMembers.toLocaleString()}**`,
                                 '',
-                                '## 👤 Human Members',
+                                '## Members',
                                 `**${humanCount.toLocaleString()}**`,
                                 '',
-                                '## 🤖 Bots',
+                                '## Bots',
                                 `**${botCount.toLocaleString()}**`,
                                 '',
-                                '## 🚀 Server Boosts',
+                                '## Server Boosts',
                                 `**${boostCount.toLocaleString()}**`,
                                 `**Boost Level:** ${boostLevel}`,
                                 '',
                                 '## 🔗 Server Invite',
-                                `[discord.gg/ausi](${vanityURL})`,
+                                '🔗 **discord.gg/ausi**',
                             ].join('\n')),
                         )
                         .addSeparatorComponents(
