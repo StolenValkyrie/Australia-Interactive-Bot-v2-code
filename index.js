@@ -536,7 +536,7 @@ if (interaction.customId === 'memberbutton') {
             content: 'Could not fetch the member count. Please try again later.',
         });
     }
-};
+}
 
 
         // =========================
