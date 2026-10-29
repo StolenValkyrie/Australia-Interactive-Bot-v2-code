@@ -1,7 +1,6 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-
 const {
     Client,
     GatewayIntentBits,
@@ -15,7 +14,12 @@ const {
     MessageFlags,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+    MediaGalleryBuilder,
+    MediaGalleryItemBuilder,
 } = require('discord.js');
 
 // Support ticket system (General / High Rankings / Partnerships / Report)
@@ -368,21 +372,75 @@ client.on(
         if (interaction.isButton()) {
             try {
                 // RULES BUTTON
-                if (interaction.customId === 'rules') {
-                    return await interaction.reply({
-                        content:
-                            '# Server Rules\n\n' +
-                            '**1. Be Respectful**\nTreat everyone respectfully.\n\n' +
-                            '**2. No Spam**\nDo not spam or flood channels.\n\n' +
-                            '**3. Follow Discord ToS**\nFollow Discord Terms of Service.\n\n' +
-                            '**4. No Unauthorised Advertising**\nAsk staff before advertising.\n\n' +
-                            '**5. Follow Staff Instructions**\nListen to moderators.\n\n' +
-                            '**6. Use Channels Correctly**\nKeep messages in the appropriate channels.\n\n' +
-                            '**7. No Exploiting**\nDo not abuse bots or server features.\n\n' +
-                            '**8. Use Common Sense**\nRespect the community.',
-                        ephemeral: true
-                    });
-                }
+
+if (interaction.customId === 'rules') {
+    const rulesContainer = new ContainerBuilder()
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(
+                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                )
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+                .setDivider(true)
+                .setSpacing(1)
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                [
+                    '# Rules',
+                    '',
+                    '## 1. Be Respectful',
+                    'Treat everyone with respect. Harassment and personal attacks are not allowed.',
+                    '',
+                    '## 2. No Spam',
+                    'Avoid spam, flooding, and unnecessary repeated messages.',
+                    '',
+                    '## 3. Follow Discord ToS',
+                    'Follow Discord’s Terms of Service and Community Guidelines.',
+                    '',
+                    '## 4. No Unauthorised Advertising',
+                    'Do not advertise without staff permission.',
+                    '',
+                    '## 5. Follow Staff Instructions',
+                    'Listen to moderators and follow their instructions.',
+                    '',
+                    '## 6. Keep Channels Appropriate',
+                    'Use the correct channels and follow their guidelines.',
+                    '',
+                    '## 7. No Exploiting',
+                    'Do not abuse bots, exploits, or server features.',
+                    '',
+                    '## 8. Use Common Sense',
+                    'Respect the community and help keep the server welcoming.',
+                    '',
+                    'Breaking these rules may result in moderation action, including a kick or ban depending on severity.',
+                ].join('\n')
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+                .setDivider(true)
+                .setSpacing(1)
+        )
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(
+                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                )
+            )
+        );
+
+    return interaction.reply({
+        components: [rulesContainer],
+        flags:
+            MessageFlags.IsComponentsV2 |
+            MessageFlags.Ephemeral,
+    });
+}
+
 
                 // MEMBER COUNT BUTTON
                 if (interaction.customId === 'memberbutton') {
@@ -935,7 +993,7 @@ client.on(
                     return null;
                 },
 
-                getString(name, required = false) {
+                getString(required = false) {
                     const value = args.join(' ').trim();
                     return value || null;
                 },
