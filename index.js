@@ -362,6 +362,62 @@ client.on(
 
 
         // =========================
+        // DASHBOARD BUTTONS
+        // =========================
+
+        if (interaction.isButton()) {
+            try {
+                // RULES BUTTON
+                if (interaction.customId === 'rules') {
+                    return await interaction.reply({
+                        content:
+                            '# Server Rules\n\n' +
+                            '**1. Be Respectful**\nTreat everyone respectfully.\n\n' +
+                            '**2. No Spam**\nDo not spam or flood channels.\n\n' +
+                            '**3. Follow Discord ToS**\nFollow Discord Terms of Service.\n\n' +
+                            '**4. No Unauthorised Advertising**\nAsk staff before advertising.\n\n' +
+                            '**5. Follow Staff Instructions**\nListen to moderators.\n\n' +
+                            '**6. Use Channels Correctly**\nKeep messages in the appropriate channels.\n\n' +
+                            '**7. No Exploiting**\nDo not abuse bots or server features.\n\n' +
+                            '**8. Use Common Sense**\nRespect the community.',
+                        ephemeral: true
+                    });
+                }
+
+                // MEMBER COUNT BUTTON
+                if (interaction.customId === 'memberbutton') {
+                    await interaction.deferReply({ ephemeral: true });
+
+                    const guild = interaction.guild;
+                    if (!guild) {
+                        return await interaction.editReply('Server not found.');
+                    }
+
+                    const members = await guild.members.fetch();
+                    const bots = members.filter(member => member.user.bot).size;
+                    const total = members.size;
+
+                    return await interaction.editReply(
+                        `## Server Member Count\n\n` +
+                        `**Total:** ${total.toLocaleString()}\n` +
+                        `**Humans:** ${(total - bots).toLocaleString()}\n` +
+                        `**Bots:** ${bots.toLocaleString()}`
+                    );
+                }
+            } catch (error) {
+                console.error('Dashboard button error:', error);
+
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: 'The button encountered an error. Please try again later.',
+                        ephemeral: true
+                    }).catch(() => {});
+                }
+            }
+        };
+
+
+        // =========================
         // DOCK VERIFICATION
         // =========================
 
