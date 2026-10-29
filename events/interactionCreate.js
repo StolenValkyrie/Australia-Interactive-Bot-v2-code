@@ -19,12 +19,11 @@ module.exports = {
         if (interaction.customId === 'rules') {
             const rulesContainer = new ContainerBuilder()
                 .addMediaGalleryComponents(
-                    new MediaGalleryBuilder()
-                        .addItems(
-                            new MediaGalleryItemBuilder().setURL(
-                                'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
-                            )
+                    new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL(
+                            'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
                         )
+                    )
                 )
                 .addSeparatorComponents(
                     new SeparatorBuilder()
@@ -96,16 +95,13 @@ module.exports = {
 
                 if (!guild) {
                     return interaction.editReply({
-                        content: '❌ This button can only be used inside a server.',
+                        content: 'This button can only be used inside a server.',
                     });
                 }
 
                 const members = await guild.members.fetch();
-
                 const total = members.size;
-                const bots = members.filter(
-                    member => member.user.bot
-                ).size;
+                const bots = members.filter(m => m.user.bot).size;
                 const humans = total - bots;
 
                 return interaction.editReply({
@@ -121,7 +117,7 @@ module.exports = {
                 console.error('Member count error:', error);
 
                 return interaction.editReply({
-                    content: '❌ Could not fetch the server member count. Please try again later.',
+                    content: 'Could not fetch the member count. Please try again later.',
                 });
             }
         }

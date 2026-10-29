@@ -36,23 +36,21 @@ function buildDashboardContainer(guild) {
             new TextDisplayBuilder().setContent('> Welcome to the Australia Interactive Dashboard. Rules are placed here.')
         )
 
-        .addActionRowComponents(
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('rules')
-                    .setLabel('Rules')
-                    .setStyle(ButtonStyle.Secondary)
-            )
-        )
 
 .addActionRowComponents(
     new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+            .setCustomId('rules')
+            .setLabel('Rules')
+            .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
             .setCustomId('memberbutton')
-            .setLabel(`${guild.memberCount}`)
+            .setLabel(`${guild.memberCount} Members`)
             .setStyle(ButtonStyle.Secondary)
     )
 )
+
 
         .addSeparatorComponents(
             new SeparatorBuilder()
