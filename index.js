@@ -443,36 +443,100 @@ if (interaction.customId === 'rules') {
 
 
                 // MEMBER COUNT BUTTON
-                if (interaction.customId === 'memberbutton') {
-                    await interaction.deferReply({ ephemeral: true });
 
-                    const guild = interaction.guild;
-                    if (!guild) {
-                        return await interaction.editReply('Server not found.');
-                    }
+if (interaction.customId === 'memberbutton') {
+    await interaction.deferReply({
+        flags: MessageFlags.Ephemeral,
+    });
 
-                    const members = await guild.members.fetch();
-                    const bots = members.filter(member => member.user.bot).size;
-                    const total = members.size;
+    try {
+        const guild = interaction.guild;
 
-                    return await interaction.editReply(
-                        `## Server Member Count\n\n` +
-                        `**Total:** ${total.toLocaleString()}\n` +
-                        `**Humans:** ${(total - bots).toLocaleString()}\n` +
-                        `**Bots:** ${bots.toLocaleString()}`
-                    );
-                }
-            } catch (error) {
-                console.error('Dashboard button error:', error);
+        if (!guild) {
+            return interaction.editReply({
+                content: 'This button can only be used inside a server.',
+            });
+        }
 
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({
-                        content: 'The button encountered an error. Please try again later.',
-                        ephemeral: true
-                    }).catch(() => {});
-                }
-            }
-        };
+        const members = await guild.members.fetch();
+        const total = members.size;
+        const bots = members.filter(member => member.user.bot).size;
+        const humans = total - bots;
+
+        const memberContainer = new ContainerBuilder()
+            // TOP IMAGE
+            .addMediaGalleryComponents(
+                new MediaGalleryBuilder().addItems(
+                    new MediaGalleryItemBuilder().setURL(
+                        'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                    )
+                )
+            )
+
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
+
+            // MEMBER COUNT TEXT
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    [
+                        '# Server Member Count',
+                        '',
+                        '## 👥 Total Members',
+                        `**${total.toLocaleString()}**`,
+                        '',
+                        '## 🧑 Human Members',
+                        `**${humans.toLocaleString()}**`,
+                        '',
+                        '## 🤖 Bots',
+                        `**${bots.toLocaleString()}**`,
+                    ].join('\n')
+                )
+            )
+
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
+
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    `*Count requested by ${interaction.user.username}*`
+                )
+            )
+
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+                    .setDivider(true)
+                    .setSpacing(1)
+            )
+
+            // BOTTOM IMAGE
+            .addMediaGalleryComponents(
+                new MediaGalleryBuilder().addItems(
+                    new MediaGalleryItemBuilder().setURL(
+                        'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                    )
+                )
+            );
+
+        return interaction.editReply({
+            components: [memberContainer],
+            flags: MessageFlags.IsComponentsV2,
+        });
+
+    } catch (error) {
+        console.error('Member count error:', error);
+
+        return interaction.editReply({
+            content: 'Could not fetch the member count. Please try again later.',
+        });
+    }
+};
 
 
         // =========================
