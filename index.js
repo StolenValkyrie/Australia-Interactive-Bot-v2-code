@@ -353,19 +353,14 @@ client.once(Events.ClientReady, async () => {
 // INTERACTION HANDLER
 // =========================
 
-client.on(Events.InteractionCreate, async interaction => {
 
-    // =========================
+client.on(Events.InteractionCreate, async interaction => {
     // SUPPORT TICKETS
-    // =========================
     if (await handleTicketInteraction(interaction)) return;
 
-    // =========================
     // DASHBOARD BUTTONS
-    // =========================
     if (interaction.isButton()) {
         try {
-
             // RULES BUTTON
             if (interaction.customId === 'rules') {
                 const rulesContainer = new ContainerBuilder()
@@ -377,9 +372,7 @@ client.on(Events.InteractionCreate, async interaction => {
                         )
                     )
                     .addSeparatorComponents(
-                        new SeparatorBuilder()
-                            .setDivider(true)
-                            .setSpacing(1)
+                        new SeparatorBuilder().setDivider(true).setSpacing(1)
                     )
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent([
@@ -413,9 +406,7 @@ client.on(Events.InteractionCreate, async interaction => {
                         ].join('\n'))
                     )
                     .addSeparatorComponents(
-                        new SeparatorBuilder()
-                            .setDivider(true)
-                            .setSpacing(1)
+                        new SeparatorBuilder().setDivider(true).setSpacing(1)
                     )
                     .addMediaGalleryComponents(
                         new MediaGalleryBuilder().addItems(
@@ -427,93 +418,71 @@ client.on(Events.InteractionCreate, async interaction => {
 
                 return interaction.reply({
                     components: [rulesContainer],
-                    flags:
-                        MessageFlags.IsComponentsV2 |
-                        MessageFlags.Ephemeral,
+                    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 });
             }
 
             // MEMBER COUNT BUTTON
             if (interaction.customId === 'memberbutton') {
                 await interaction.deferReply({
-                    flags:
-                        MessageFlags.Ephemeral |
-                        MessageFlags.IsComponentsV2,
+                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                 });
 
-                try {
-                    const guild = interaction.guild;
+                const guild = interaction.guild;
 
-                    if (!guild) {
-                        return interaction.editReply({
-                            content: 'This button can only be used inside a server.',
-                        });
-                    }
-
-                    // Uses Discord's cached server member count.
-                    // Does not fetch every member on every click.
-                    const total = guild.memberCount;
-
-                    const memberContainer = new ContainerBuilder()
-                        .addMediaGalleryComponents(
-                            new MediaGalleryBuilder().addItems(
-                                new MediaGalleryItemBuilder().setURL(
-                                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
-                                )
-                            )
-                        )
-                        .addSeparatorComponents(
-                            new SeparatorBuilder()
-                                .setDivider(true)
-                                .setSpacing(1)
-                        )
-                        .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent([
-                                '# Server Member Count',
-                                '',
-                                '## 👥 Total Members',
-                                `**${total.toLocaleString()}**`,
-                                '',
-                                '*Human and bot breakdown is not available in this cached-count version.*',
-                            ].join('\n'))
-                        )
-                        .addSeparatorComponents(
-                            new SeparatorBuilder()
-                                .setDivider(true)
-                                .setSpacing(1)
-                        )
-                        .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(
-                                `*Count requested by ${interaction.user.username}*`
-                            )
-                        )
-                        .addSeparatorComponents(
-                            new SeparatorBuilder()
-                                .setDivider(true)
-                                .setSpacing(1)
-                        )
-                        .addMediaGalleryComponents(
-                            new MediaGalleryBuilder().addItems(
-                                new MediaGalleryItemBuilder().setURL(
-                                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
-                                )
-                            )
-                        );
-
+                if (!guild) {
                     return interaction.editReply({
-                        components: [memberContainer],
-                        flags: MessageFlags.IsComponentsV2,
-                    });
-
-                } catch (error) {
-                    console.error('Member count error:', error);
-
-                    return interaction.editReply({
-                        content: 'Could not fetch the member count. Please try again later.',
+                        content: 'This button can only be used inside a server.',
                     });
                 }
-            }
 
+                const total = guild.memberCount;
+
+                const memberContainer = new ContainerBuilder()
+                    .addMediaGalleryComponents(
+                        new MediaGalleryBuilder().addItems(
+                            new MediaGalleryItemBuilder().setURL(
+                                'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                            )
+                        )
+                    )
+                    .addSeparatorComponents(
+                        new SeparatorBuilder().setDivider(true).setSpacing(1)
+                    )
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent([
+                            '# Server Member Count',
+                            '',
+                            '## 👥 Total Members',
+                            `**${total.toLocaleString()}**`,
+                            '',
+                            '*Human and bot breakdown is not available in this cached-count version.*',
+                        ].join('\n'))
+                    )
+                    .addSeparatorComponents(
+                        new SeparatorBuilder().setDivider(true).setSpacing(1)
+                    )
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent(
+                            `*Count requested by ${interaction.user.username}*`
+                        )
+                    )
+                    .addSeparatorComponents(
+                        new SeparatorBuilder().setDivider(true).setSpacing(1)
+                    )
+                    .addMediaGalleryComponents(
+                        new MediaGalleryBuilder().addItems(
+                            new MediaGalleryItemBuilder().setURL(
+                                'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                            )
+                        )
+                    );
+
+                return interaction.editReply({
+                    components: [memberContainer],
+                    flags: MessageFlags.IsComponentsV2,
+                });
+            }
         } catch (error) {
             console.error('Dashboard button error:', error);
 
@@ -523,16 +492,13 @@ client.on(Events.InteractionCreate, async interaction => {
                     flags: MessageFlags.Ephemeral,
                 }).catch(console.error);
             }
+
+            return;
         }
     }
 
-    // =========================
     // DOCK VERIFICATION
-    // =========================
-    if (
-        interaction.isButton() &&
-        interaction.customId === 'dock_verify'
-    ) {
+    if (interaction.isButton() && interaction.customId === 'dock_verify') {
         try {
             const response = await fetch(
                 'https://api.docksys.xyz/api/v1/verify/session',
@@ -576,15 +542,13 @@ client.on(Events.InteractionCreate, async interaction => {
                 .setStyle(ButtonStyle.Link)
                 .setURL(verifyUrl);
 
-            const row = new ActionRowBuilder()
-                .addComponents(verifyButton);
+            const row = new ActionRowBuilder().addComponents(verifyButton);
 
             return interaction.reply({
                 content: '🔗 Click the button below to verify your Roblox account:',
                 components: [row],
                 flags: MessageFlags.Ephemeral,
             });
-
         } catch (error) {
             console.error('Dock verification error:', error);
 
@@ -594,10 +558,40 @@ client.on(Events.InteractionCreate, async interaction => {
                     flags: MessageFlags.Ephemeral,
                 }).catch(console.error);
             }
+
+            return;
         }
     }
 
+    // SLASH COMMANDS
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = interaction.client.commands.get(interaction.commandName);
+
+    if (!command) {
+        console.error(`No command matching ${interaction.commandName} was found.`);
+        return;
+    }
+
+    try {
+        await command.execute(interaction);
+    } catch (error) {
+        console.error(`Error executing ${interaction.commandName}`, error);
+
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({
+                content: 'There was an error while executing this command!',
+                flags: MessageFlags.Ephemeral,
+            }).catch(console.error);
+        } else {
+            await interaction.reply({
+                content: 'There was an error while executing this command!',
+                flags: MessageFlags.Ephemeral,
+            }).catch(console.error);
+        }
+    }
 });
+
 
 
         // =========================
