@@ -353,312 +353,251 @@ client.once(Events.ClientReady, async () => {
 // INTERACTION HANDLER
 // =========================
 
-client.on(
-    Events.InteractionCreate,
-    async interaction => {
+client.on(Events.InteractionCreate, async interaction => {
 
-        // =========================
-        // SUPPORT TICKETS
-        // =========================
-        // Buttons + modals whose customId starts with "ticket:"
+    // =========================
+    // SUPPORT TICKETS
+    // =========================
+    if (await handleTicketInteraction(interaction)) return;
 
-        if (await handleTicketInteraction(interaction)) return;
+    // =========================
+    // DASHBOARD BUTTONS
+    // =========================
+    if (interaction.isButton()) {
+        try {
 
-
-        // =========================
-        // DASHBOARD BUTTONS
-        // =========================
-
-        if (interaction.isButton()) {
-            try {
-                // RULES BUTTON
-
-if (interaction.customId === 'rules') {
-    const rulesContainer = new ContainerBuilder()
-        .addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(
-                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
-                )
-            )
-        )
-        .addSeparatorComponents(
-            new SeparatorBuilder()
-                .setDivider(true)
-                .setSpacing(1)
-        )
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                [
-                    '# Rules',
-                    '',
-                    '## 1. Be Respectful',
-                    'Treat everyone with respect. Harassment and personal attacks are not allowed.',
-                    '',
-                    '## 2. No Spam',
-                    'Avoid spam, flooding, and unnecessary repeated messages.',
-                    '',
-                    '## 3. Follow Discord ToS',
-                    'Follow Discord’s Terms of Service and Community Guidelines.',
-                    '',
-                    '## 4. No Unauthorised Advertising',
-                    'Do not advertise without staff permission.',
-                    '',
-                    '## 5. Follow Staff Instructions',
-                    'Listen to moderators and follow their instructions.',
-                    '',
-                    '## 6. Keep Channels Appropriate',
-                    'Use the correct channels and follow their guidelines.',
-                    '',
-                    '## 7. No Exploiting',
-                    'Do not abuse bots, exploits, or server features.',
-                    '',
-                    '## 8. Use Common Sense',
-                    'Respect the community and help keep the server welcoming.',
-                    '',
-                    'Breaking these rules may result in moderation action, including a kick or ban depending on severity.',
-                ].join('\n')
-            )
-        )
-        .addSeparatorComponents(
-            new SeparatorBuilder()
-                .setDivider(true)
-                .setSpacing(1)
-        )
-        .addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(
-                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
-                )
-            )
-        );
-
-    return interaction.reply({
-        components: [rulesContainer],
-        flags:
-            MessageFlags.IsComponentsV2 |
-            MessageFlags.Ephemeral,
-    });
-}
-
-
-                // MEMBER COUNT BUTTON
-
-if (interaction.customId === 'memberbutton') {
-    await interaction.deferReply({
-        flags: MessageFlags.Ephemeral,
-    });
-
-    try {
-        const guild = interaction.guild;
-
-        if (!guild) {
-            return interaction.editReply({
-                content: 'This button can only be used inside a server.',
-            });
-        }
-
-        const members = await guild.members.fetch();
-        const total = members.size;
-        const bots = members.filter(member => member.user.bot).size;
-        const humans = total - bots;
-
-        const memberContainer = new ContainerBuilder()
-            // TOP IMAGE
-            .addMediaGalleryComponents(
-                new MediaGalleryBuilder().addItems(
-                    new MediaGalleryItemBuilder().setURL(
-                        'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+            // RULES BUTTON
+            if (interaction.customId === 'rules') {
+                const rulesContainer = new ContainerBuilder()
+                    .addMediaGalleryComponents(
+                        new MediaGalleryBuilder().addItems(
+                            new MediaGalleryItemBuilder().setURL(
+                                'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                            )
+                        )
                     )
-                )
-            )
-
-            .addSeparatorComponents(
-                new SeparatorBuilder()
-                    .setDivider(true)
-                    .setSpacing(1)
-            )
-
-            // MEMBER COUNT TEXT
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    [
-                        '# Server Member Count',
-                        '',
-                        '## 👥 Total Members',
-                        `**${total.toLocaleString()}**`,
-                        '',
-                        '## 🧑 Human Members',
-                        `**${humans.toLocaleString()}**`,
-                        '',
-                        '## 🤖 Bots',
-                        `**${bots.toLocaleString()}**`,
-                    ].join('\n')
-                )
-            )
-
-            .addSeparatorComponents(
-                new SeparatorBuilder()
-                    .setDivider(true)
-                    .setSpacing(1)
-            )
-
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    `*Count requested by ${interaction.user.username}*`
-                )
-            )
-
-            .addSeparatorComponents(
-                new SeparatorBuilder()
-                    .setDivider(true)
-                    .setSpacing(1)
-            )
-
-            // BOTTOM IMAGE
-            .addMediaGalleryComponents(
-                new MediaGalleryBuilder().addItems(
-                    new MediaGalleryItemBuilder().setURL(
-                        'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                    .addSeparatorComponents(
+                        new SeparatorBuilder()
+                            .setDivider(true)
+                            .setSpacing(1)
                     )
-                )
-            );
-
-        return interaction.editReply({
-            components: [memberContainer],
-            flags: MessageFlags.IsComponentsV2,
-        });
-
-    } catch (error) {
-        console.error('Member count error:', error);
-
-        return interaction.editReply({
-            content: 'Could not fetch the member count. Please try again later.',
-        });
-    }
-}
-
-
-        // =========================
-        // DOCK VERIFICATION
-        // =========================
-
-        if (
-            interaction.isButton() &&
-            interaction.customId === 'dock_verify'
-        ) {
-
-            try {
-
-                const response = await fetch(
-                    'https://api.docksys.xyz/api/v1/verify/session',
-                    {
-                        method: 'POST',
-
-                        headers: {
-                            Authorization:
-                                `Bearer ${process.env.DOCK_API_KEY}`,
-
-                            'Content-Type':
-                                'application/json'
-                        },
-
-                        body: JSON.stringify({
-                            pid:
-                                process.env.DOCK_PID,
-
-                            clientId:
-                                interaction.user.id,
-
-                            guildId:
-                                interaction.guild.id
-                        })
-                    }
-                );
-
-                const payload =
-                    await response.json();
-
-                console.log('Dock response:', payload);
-
-                if (!response.ok) {
-
-                    await interaction.reply({
-                        content:
-                            '❌ Could not create your verification session. Please try again later.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-                const verifyUrl =
-                    payload?.data?.verifyUrl;
-
-                if (!verifyUrl) {
-
-                    console.error(
-                        'No verifyUrl returned by Dock:',
-                        payload
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent([
+                            '# Rules',
+                            '',
+                            '## 1. Be Respectful',
+                            'Treat everyone with respect. Harassment and personal attacks are not allowed.',
+                            '',
+                            '## 2. No Spam',
+                            'Avoid spam, flooding, and unnecessary repeated messages.',
+                            '',
+                            '## 3. Follow Discord ToS',
+                            'Follow Discord’s Terms of Service and Community Guidelines.',
+                            '',
+                            '## 4. No Unauthorised Advertising',
+                            'Do not advertise without staff permission.',
+                            '',
+                            '## 5. Follow Staff Instructions',
+                            'Listen to moderators and follow their instructions.',
+                            '',
+                            '## 6. Keep Channels Appropriate',
+                            'Use the correct channels and follow their guidelines.',
+                            '',
+                            '## 7. No Exploiting',
+                            'Do not abuse bots, exploits, or server features.',
+                            '',
+                            '## 8. Use Common Sense',
+                            'Respect the community and help keep the server welcoming.',
+                            '',
+                            'Breaking these rules may result in moderation action, including a kick or ban depending on severity.',
+                        ].join('\n'))
+                    )
+                    .addSeparatorComponents(
+                        new SeparatorBuilder()
+                            .setDivider(true)
+                            .setSpacing(1)
+                    )
+                    .addMediaGalleryComponents(
+                        new MediaGalleryBuilder().addItems(
+                            new MediaGalleryItemBuilder().setURL(
+                                'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                            )
+                        )
                     );
 
-                    await interaction.reply({
-                        content:
-                            '❌ Dock did not return a verification link.',
-
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-
-                    return;
-                }
-
-                const verifyButton =
-                    new ButtonBuilder()
-                        .setLabel('Verify with Dock')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(verifyUrl);
-
-                const row =
-                    new ActionRowBuilder()
-                        .addComponents(
-                            verifyButton
-                        );
-
-                await interaction.reply({
-                    content:
-                        '🔗 Click the button below to verify your Roblox account:',
-
-                    components:
-                        [row],
-
+                return interaction.reply({
+                    components: [rulesContainer],
                     flags:
-                        MessageFlags.Ephemeral
+                        MessageFlags.IsComponentsV2 |
+                        MessageFlags.Ephemeral,
+                });
+            }
+
+            // MEMBER COUNT BUTTON
+            if (interaction.customId === 'memberbutton') {
+                await interaction.deferReply({
+                    flags:
+                        MessageFlags.Ephemeral |
+                        MessageFlags.IsComponentsV2,
                 });
 
-            } catch (error) {
+                try {
+                    const guild = interaction.guild;
 
-                console.error(
-                    'Dock verification error:',
-                    error
-                );
+                    if (!guild) {
+                        return interaction.editReply({
+                            content: 'This button can only be used inside a server.',
+                        });
+                    }
 
-                if (!interaction.replied) {
+                    // Uses Discord's cached server member count.
+                    // Does not fetch every member on every click.
+                    const total = guild.memberCount;
 
-                    await interaction.reply({
-                        content:
-                            '❌ Something went wrong while creating your verification session.',
+                    const memberContainer = new ContainerBuilder()
+                        .addMediaGalleryComponents(
+                            new MediaGalleryBuilder().addItems(
+                                new MediaGalleryItemBuilder().setURL(
+                                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
+                                )
+                            )
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1)
+                        )
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent([
+                                '# Server Member Count',
+                                '',
+                                '## 👥 Total Members',
+                                `**${total.toLocaleString()}**`,
+                                '',
+                                '*Human and bot breakdown is not available in this cached-count version.*',
+                            ].join('\n'))
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1)
+                        )
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(
+                                `*Count requested by ${interaction.user.username}*`
+                            )
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                                .setDivider(true)
+                                .setSpacing(1)
+                        )
+                        .addMediaGalleryComponents(
+                            new MediaGalleryBuilder().addItems(
+                                new MediaGalleryItemBuilder().setURL(
+                                    'https://cdn.phototourl.com/member/2026-10-28-d4604693-3a08-4375-aa89-4890cbb8a10a.png'
+                                )
+                            )
+                        );
 
-                        flags:
-                            MessageFlags.Ephemeral
+                    return interaction.editReply({
+                        components: [memberContainer],
+                        flags: MessageFlags.IsComponentsV2,
+                    });
+
+                } catch (error) {
+                    console.error('Member count error:', error);
+
+                    return interaction.editReply({
+                        content: 'Could not fetch the member count. Please try again later.',
                     });
                 }
             }
 
-            return;
+        } catch (error) {
+            console.error('Dashboard button error:', error);
+
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: 'Something went wrong with this dashboard button.',
+                    flags: MessageFlags.Ephemeral,
+                }).catch(console.error);
+            }
         }
+    }
+
+    // =========================
+    // DOCK VERIFICATION
+    // =========================
+    if (
+        interaction.isButton() &&
+        interaction.customId === 'dock_verify'
+    ) {
+        try {
+            const response = await fetch(
+                'https://api.docksys.xyz/api/v1/verify/session',
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${process.env.DOCK_API_KEY}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        pid: process.env.DOCK_PID,
+                        clientId: interaction.user.id,
+                        guildId: interaction.guild?.id,
+                    }),
+                }
+            );
+
+            const payload = await response.json();
+            console.log('Dock response:', payload);
+
+            if (!response.ok) {
+                return interaction.reply({
+                    content: '❌ Could not create your verification session. Please try again later.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const verifyUrl = payload?.data?.verifyUrl;
+
+            if (!verifyUrl) {
+                console.error('No verifyUrl returned by Dock:', payload);
+
+                return interaction.reply({
+                    content: '❌ Dock did not return a verification link.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const verifyButton = new ButtonBuilder()
+                .setLabel('Verify with Dock')
+                .setStyle(ButtonStyle.Link)
+                .setURL(verifyUrl);
+
+            const row = new ActionRowBuilder()
+                .addComponents(verifyButton);
+
+            return interaction.reply({
+                content: '🔗 Click the button below to verify your Roblox account:',
+                components: [row],
+                flags: MessageFlags.Ephemeral,
+            });
+
+        } catch (error) {
+            console.error('Dock verification error:', error);
+
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Something went wrong while creating your verification session.',
+                    flags: MessageFlags.Ephemeral,
+                }).catch(console.error);
+            }
+        }
+    }
+
+});
 
 
         // =========================
