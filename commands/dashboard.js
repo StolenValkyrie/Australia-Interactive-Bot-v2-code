@@ -22,7 +22,7 @@ function buildDashboardContainer(guild) {
         .addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(
                 new MediaGalleryItemBuilder().setURL(
-                    'xxx'
+                    'https://cdn.phototourl.com/member/2026-10-29-17504ecd-49eb-4b0d-a08d-ea893fbdf086.png'
                 )
             )
         )
@@ -44,6 +44,15 @@ function buildDashboardContainer(guild) {
                     .setStyle(ButtonStyle.Secondary)
             )
         )
+
+.addActionRowComponents(
+    new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('memberbutton')
+            .setLabel(`${guild.memberCount}`)
+            .setStyle(ButtonStyle.Secondary)
+    )
+)
 
         .addSeparatorComponents(
             new SeparatorBuilder()
