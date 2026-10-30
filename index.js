@@ -22,6 +22,7 @@ const client = new Client({
 });
 
 require('./logger.js')(client);
+require('./antiping')(client);
 client.commands = new Collection();
 
 function sanitizeName(str, fallback = 'ticket') {
@@ -676,4 +677,4 @@ if (!process.env.BOT_TOKEN) {
 
 client.login(process.env.BOT_TOKEN).catch(error => {
     console.error('❌ Discord login failed:', error);
-});
+}); 
