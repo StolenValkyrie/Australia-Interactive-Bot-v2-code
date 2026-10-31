@@ -8,6 +8,7 @@
 //   3 of those timeouts   -> kick
 //
 // Members with the EXEMPT role can ping freely.
+// The bot's warning / timeout / kick messages delete themselves after 2 days.
 // Hooked up in index.js with:  require('./antiping')(client);
 
 const fs = require('fs');
@@ -27,6 +28,9 @@ const ANTI_PING_ROLE_IDS = [
 const EXEMPT_ROLE_ID = '1565695043036258345'; // people allowed to ping them
 
 const LIMIT = 3; // 3 warnings = timeout, 3 timeouts = next level, ...
+
+const DELETE_REPLIES_AFTER = 2 * 24 * 60 * 60 * 1000; // bot's anti-ping messages are deleted after 2 days
+const SWEEP_EVERY = 5 * 60 * 1000;                    // how often the bot checks for messages to delete
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -61,6 +65,64 @@ function save(data) {
         fs.writeFileSync(dataFile, JSON.stringify(data, null, 4));
     } catch (error) {
         console.error('❌ Could not write antiping.json:', error);
+    }
+}
+
+// =========================
+// AUTO-DELETE THE BOT'S MESSAGES
+// =========================
+// Every message the bot sends about an anti-ping strike is remembered in
+// antiping.json (under "__pending") and deleted once it is 2 days old.
+// It is saved to the file so it still works after the bot restarts.
+
+function scheduleDeletion(sentMessage) {
+
+    const data = load();
+
+    data.__pending = data.__pending || [];
+
+    data.__pending.push({
+        channelId: sentMessage.channel.id,
+        messageId: sentMessage.id,
+        at: Date.now() + DELETE_REPLIES_AFTER
+    });
+
+    save(data);
+}
+
+async function sweepPending(client) {
+
+    try {
+
+        const now = Date.now();
+
+        const due = (load().__pending || []).filter(entry => entry.at <= now);
+
+        if (!due.length) return;
+
+        for (const entry of due) {
+
+            const channel = await client.channels.fetch(entry.channelId).catch(() => null);
+
+            const target = channel
+                ? await channel.messages.fetch(entry.messageId).catch(() => null)
+                : null;
+
+            if (target) await target.delete().catch(() => {});
+        }
+
+        // Re-read the file so records saved while we were deleting are not lost
+        const fresh = load();
+
+        const doneIds = new Set(due.map(entry => entry.messageId));
+
+        fresh.__pending = (fresh.__pending || []).filter(entry => !doneIds.has(entry.messageId));
+
+        save(fresh);
+
+    } catch (error) {
+
+        console.error('antiping: error deleting old messages:', error);
     }
 }
 
@@ -129,6 +191,18 @@ async function findProtectedTarget(message) {
 
 module.exports = client => {
 
+    // Delete old anti-ping messages on start, then keep checking
+    const startSweeping = () => {
+        sweepPending(client);
+        setInterval(() => sweepPending(client), SWEEP_EVERY).unref();
+    };
+
+    if (client.isReady()) {
+        startSweeping();
+    } else {
+        client.once(Events.ClientReady, startSweeping);
+    }
+
     client.on(Events.MessageCreate, async message => {
 
         try {
@@ -162,11 +236,15 @@ module.exports = client => {
 
             const tier = registerPing(record);
 
-            const reply = content =>
-                message.reply({
+            const reply = async content => {
+
+                const sent = await message.reply({
                     content,
                     allowedMentions: { users: [message.author.id] }
-                }).catch(() => {});
+                }).catch(() => null);
+
+                if (sent) scheduleDeletion(sent);
+            };
 
             // =========================
             // JUST A WARNING
