@@ -1,3 +1,14 @@
+// antiping.js
+// Anti-ping system.
+//
+//   Pinging anyone with an ANTI-PING role (or the role itself) = 1 warning
+//   3 warnings            -> 10 minute timeout
+//   3 of those timeouts   -> 12 hour timeout
+//   3 of those timeouts   -> 2 day timeout
+//   3 of those timeouts   -> kick
+//
+// Members with the EXEMPT role can ping freely.
+// Hooked up in index.js with:  require('./antiping')(client);
 
 const fs = require('fs');
 const path = require('path');
@@ -7,8 +18,13 @@ const { Events } = require('discord.js');
 // SETTINGS
 // =========================
 
-const ANTI_PING_ROLE_ID = '1499751119390376097'; // people who must not be pinged
-const EXEMPT_ROLE_ID = '1565695043036258345';    // people allowed to ping them
+// Members with ANY of these roles must not be pinged (pinging the roles themselves also counts)
+const ANTI_PING_ROLE_IDS = [
+    '1499751119390376097',
+    '1565729124385951885',
+];
+
+const EXEMPT_ROLE_ID = '1565695043036258345'; // people allowed to ping them
 
 const LIMIT = 3; // 3 warnings = timeout, 3 timeouts = next level, ...
 
@@ -85,8 +101,10 @@ function registerPing(record) {
 
 async function findProtectedTarget(message) {
 
-    if (message.mentions.roles.has(ANTI_PING_ROLE_ID)) {
-        return `<@&${ANTI_PING_ROLE_ID}>`;
+    const pingedRoleId = ANTI_PING_ROLE_IDS.find(id => message.mentions.roles.has(id));
+
+    if (pingedRoleId) {
+        return `<@&${pingedRoleId}>`;
     }
 
     for (const [id, user] of message.mentions.users) {
@@ -97,7 +115,7 @@ async function findProtectedTarget(message) {
             message.mentions.members?.get(id) ||
             await message.guild.members.fetch(id).catch(() => null);
 
-        if (member?.roles.cache.has(ANTI_PING_ROLE_ID)) {
+        if (member && ANTI_PING_ROLE_IDS.some(roleId => member.roles.cache.has(roleId))) {
             return `<@${id}>`;
         }
     }
